@@ -45,7 +45,7 @@ Monthly operating cost = calls × variable cost/call + fixed operating costs
 
 Input/output tokens are totals over every model request in a contact, not just the
 last turn. Longer dialogue resends context. Startup greetings, clarification and
-conversation replies also incur usage. Embeddings/OCR, retry traffic, cloud hosting,
+conversation replies and LLM-generated idle/closing lines also incur usage. Embeddings/OCR, retry traffic, cloud hosting,
 monitoring, maintenance, taxes, payment fees and any future telephony charges must
 be included in the real budget. The example below assigns a hypothetical $180/month
 fixed budget for hosting/admin/maintenance, not a vendor quote. Initial implementation

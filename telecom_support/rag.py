@@ -168,6 +168,7 @@ class SupportRAG:
         self.last_answer = None
         self.last_answer_speech = None
         self.call_action = None
+        self.call_notices = []
         self.account_agent = None
         if account_service is not None:
             from .tool_agent import ReadOnlyToolAgent
@@ -211,6 +212,17 @@ class SupportRAG:
     def close(self):
         if self.database_client is not None:
             self.database_client.close()
+
+    def generate_call_message(self, event):
+        """Generate wording from safe text history, never raw database results."""
+        budget = self.scope_guard.reserve_backend_request()
+        if not budget.allowed:
+            raise RuntimeError("Call message request limit reached")
+        dialogue = ([AIMessage(content=self.opening_message)] if self.opening_message else []) + list(self.history)
+        return self.conversation.call_message(event, dialogue=dialogue, notices="\n".join(self.call_notices))
+
+    def remember_call_message(self, text):
+        self.call_notices = (self.call_notices + [text])[-6:]
 
     def account_context(self):
         if self.account_agent:

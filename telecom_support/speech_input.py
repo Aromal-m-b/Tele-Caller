@@ -152,6 +152,22 @@ def spoken_command(text):
     return re.sub(r"[^\w\s]", "", text.lower()).strip()
 
 
+async def generated_call_message(application, event, fallback):
+    generate = getattr(application, "generate_call_message", None)
+    if not callable(generate):
+        return fallback
+    task = asyncio.create_task(asyncio.to_thread(generate, event))
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        with suppress(Exception):
+            await task
+        raise
+    except Exception:
+        # Emergency recovery only. Normal call-event wording comes from Gemini.
+        return fallback
+
+
 async def process_turns(application, turns, *, write=print, clock=time.monotonic, speaker=None,
                         control=None, idle_timeout=45, idle_grace=20, idle_checkin=0):
     from .call_control import CallControl
@@ -172,6 +188,16 @@ async def process_turns(application, turns, *, write=print, clock=time.monotonic
                     write("Listening...")
             except SpeechOutputError:
                 write("Speech playback is unavailable; please read the answer above.")
+    async def call_event(event, fallback, *, ending=False, idle=False):
+        before = control.last_activity
+        text = await generated_call_message(application, event, fallback)
+        if idle and (control.last_activity != before or not turns.empty()):
+            return False
+        await emit(text, ending=ending)
+        remember = getattr(application, "remember_call_message", None)
+        if callable(remember):
+            remember(text)
+        return True
     opening = getattr(application, "start_conversation", None)
     if callable(opening):
         generation = asyncio.create_task(asyncio.to_thread(opening))
@@ -203,7 +229,8 @@ async def process_turns(application, turns, *, write=print, clock=time.monotonic
                     before, began = control.last_activity, clock()
                     control.pending = False
                     presence_prompt = True
-                    await emit("Hello again. Can you hear me?")
+                    if not await call_event("idle_hint", "Hello again. Can you hear me?", idle=True):
+                        continue
                     # Check-in playback does not count against the caller's wait.
                     if control.last_activity == before:
                         control.last_activity += clock() - began
@@ -213,12 +240,14 @@ async def process_turns(application, turns, *, write=print, clock=time.monotonic
                     continue
                 control.pending = False
                 presence_prompt = True
-                await emit("Are you still there? Please say something if you'd like to keep the call open.")
+                if not await call_event("idle_warning", "Are you still there? Please say something if you'd like to keep the call open.", idle=True):
+                    continue
                 control.touch()
                 warned_at = clock()
             else:
-                await emit("I haven't heard from you, so I'll end the call now. You're welcome to call again. Goodbye!", ending=True)
-                return
+                if await call_event("idle_goodbye", "I haven't heard from you, so I'll end the call now. You're welcome to call again. Goodbye!", ending=True, idle=True):
+                    return
+                warned_at = None
             continue
         try:
             if turn is None:
@@ -228,14 +257,14 @@ async def process_turns(application, turns, *, write=print, clock=time.monotonic
             hinted_for = None
             action = control.decide(turn.text, started_at=turn.started_at)
             if action == "end":
-                await emit("Thanks for calling Sun Direct. Goodbye!", ending=True)
+                await call_event("goodbye", "Thanks for calling Sun Direct. Goodbye!", ending=True)
                 return
             write("You: " + turn.text)
             if presence_prompt:
                 presence_prompt = False
                 from .account_tools import explicit_confirmation
                 if explicit_confirmation(spoken_command(turn.text)) or spoken_command(turn.text) in {"im here", "i am here", "i can hear you", "hello"}:
-                    await emit("Thanks, I'm here. Go ahead.")
+                    await call_event("presence_ack", "Thanks, I'm here. Go ahead.")
                     control.touch()
                     continue
                 if spoken_command(turn.text) in {"no", "not really", "i cant hear you"}:
@@ -246,12 +275,12 @@ async def process_turns(application, turns, *, write=print, clock=time.monotonic
                     control.touch()
                     continue
             if action == "ask":
-                await emit("Would you like me to end the call?")
+                await call_event("confirm_end", "Would you like me to end the call?")
                 control.asked()
                 control.touch()
                 continue
             if action == "stay":
-                await emit("Of course, we'll keep the call open. What else would you like help with?")
+                await call_event("stay", "Of course, we'll keep the call open. What else would you like help with?")
                 control.touch()
                 continue
             agent = getattr(application, "account_agent", None)
@@ -277,7 +306,7 @@ async def process_turns(application, turns, *, write=print, clock=time.monotonic
                 continue
             await emit(answer, getattr(application, "last_spoken_response", None))
             if getattr(application, "call_action", None) == "confirm_end":
-                await emit("Would you like me to end the call?")
+                await call_event("confirm_end", "Would you like me to end the call?")
                 control.asked()
             control.touch()
             last_answer_at = float("inf") if speaker is not None and getattr(speaker, "interrupted", False) else clock()
@@ -412,11 +441,12 @@ async def _microphone_session(application, settings, *, microphone_factory=Micro
                     if stop_requested.is_set():
                         processor.cancel()
                         await asyncio.gather(processor, return_exceptions=True)
-                        write("Goodbye!")
+                        farewell = await generated_call_message(application, "goodbye", "Thanks for calling Sun Direct. Goodbye!")
+                        write("A: " + farewell)
                         if speaker is not None:
                             from .speech_output import SpeechOutputError
                             with suppress(SpeechOutputError, asyncio.TimeoutError):
-                                await asyncio.wait_for(speaker.speak("Thanks for calling Sun Direct. Goodbye!"), 5)
+                                await asyncio.wait_for(speaker.speak(farewell), 5)
                     else:
                         await processor
                 else:

@@ -195,3 +195,51 @@ def test_yes_to_audibility_check_does_not_confirm_recharge_or_disconnect():
         assert not any("Goodbye!" in text for text in output)
         app.generate.assert_not_called()
     asyncio.run(run())
+
+
+def test_idle_lines_are_generated_by_model_with_dialogue_context():
+    from langchain_core.runnables import RunnableLambda
+    from telecom_support.rag import SupportRAG
+    async def run():
+        seen = []
+        replies = iter(["Still with me? Is the audio coming through?",
+                        "Are you there? I'll need to wrap up soon if I don't hear back.",
+                        "I'll leave it there for now. Take care!"])
+        def model(prompt):
+            seen.append(prompt.to_messages())
+            return next(replies)
+        app = SupportRAG(None, RunnableLambda(model))
+        app.opening_message = "Maya from Sun Direct here."
+        # Avoid a second startup generation in this isolated processor check.
+        app.start_conversation = lambda: app.opening_message
+        app._remember("My audio was faint", "Please check the volume.")
+        output = []
+        await asyncio.wait_for(process_turns(app, asyncio.Queue(), write=output.append,
+            idle_checkin=.01, idle_timeout=.03, idle_grace=.01), 2)
+        assert "A: Still with me? Is the audio coming through?" in output
+        assert output[-1] == "A: I'll leave it there for now. Take care!"
+        assert len(seen) == 3
+        assert "My audio was faint" in [m.content for m in seen[0] if m.type == "human"]
+        assert "Still with me?" in seen[1][0].content
+    asyncio.run(run())
+
+
+def test_user_reply_during_idle_generation_prevents_stale_disconnect():
+    async def run():
+        turns = asyncio.Queue()
+        control = CallControl()
+        output = []
+        def generate(event):
+            # Simulate caller activity arriving while Gemini prepares the hint.
+            if event == "idle_hint":
+                control.touch()
+            return "Can you still hear me?"
+        app = SimpleNamespace(generate_call_message=generate)
+        task = asyncio.create_task(process_turns(app, turns, write=output.append, control=control,
+            idle_checkin=.01, idle_timeout=.04, idle_grace=.02))
+        await asyncio.sleep(.06)
+        assert not task.done()
+        assert not output  # Stale generated hints weren't spoken over activity.
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError): await task
+    asyncio.run(run())

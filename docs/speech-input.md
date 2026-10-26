@@ -50,6 +50,11 @@ not authorize a hang-up. End-call confirmation is separate from account operatio
 After 15 seconds without recognized caller words, Maya checks: "Hello again. Can
 you hear me?" At 45 seconds of caller inactivity she gives the final still-there
 warning. After another 20 seconds without a response, she says goodbye and disconnects.
+The wording above describes intent, not a fixed script: Gemini generates the early
+check-in, warning, goodbye, hang-up confirmation and acknowledgement from safe recent
+text context. Generation failure alone uses a short fallback. Timers and consent
+decisions remain application-controlled. If caller activity arrives during idle
+message generation, that stale message is discarded before speech/disconnection.
 Audibility confirmations stay separate from account and hang-up confirmations.
 Recognized caller activity resets the idle deadline; raw microphone noise does not.
 Backend processing and assistant playback do not consume the caller's idle budget.
