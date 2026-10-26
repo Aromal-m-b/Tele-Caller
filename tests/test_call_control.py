@@ -166,3 +166,32 @@ def test_direct_hangup_closes_session_and_speaks_goodbye_without_model():
         output.speak.assert_awaited_once_with("Thanks for calling Sun Direct. Goodbye!")
         assert socket.closed and microphone.closed and output.closed
     asyncio.run(run())
+
+
+def test_early_audibility_check_precedes_warning_and_goodbye():
+    async def run():
+        output = []
+        await asyncio.wait_for(process_turns(SimpleNamespace(), asyncio.Queue(), write=output.append,
+            idle_checkin=.01, idle_timeout=.03, idle_grace=.01), 1)
+        assert "Hello again. Can you hear me?" in output[0]
+        assert "Are you still there?" in output[1]
+        assert "end the call now" in output[2]
+        assert len(output) == 3
+    asyncio.run(run())
+
+
+def test_yes_to_audibility_check_does_not_confirm_recharge_or_disconnect():
+    async def run():
+        turns, output = asyncio.Queue(), []
+        app = SimpleNamespace(generate=Mock(side_effect=AssertionError("Presence answer must stay local")))
+        def write(text):
+            output.append(text)
+            if "Hello again" in text:
+                turns.put_nowait(SpokenTurn("Yes please", time.monotonic()))
+                turns.put_nowait(None)
+        await asyncio.wait_for(process_turns(app, turns, write=write,
+            idle_checkin=.01, idle_timeout=.03, idle_grace=.02), 1)
+        assert any("Thanks, I'm here" in text for text in output)
+        assert not any("Goodbye!" in text for text in output)
+        app.generate.assert_not_called()
+    asyncio.run(run())

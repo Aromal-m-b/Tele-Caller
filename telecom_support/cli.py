@@ -65,8 +65,9 @@ def main(argv=None):
     parser.add_argument("--silent", action="store_true", help="Microphone input with text-only replies")
     parser.add_argument("--tts-voice", help="Deepgram voice (default: aura-2-andromeda-en, conversational female English)")
     parser.add_argument("--output-device", type=int, help="PyAudio speaker device index (default: system output)")
-    parser.add_argument("--idle-timeout", type=float, help="Seconds of caller inactivity before warning (default: 180; 0 disables)")
-    parser.add_argument("--idle-grace", type=float, help="Seconds to wait after the idle warning (default: 45)")
+    parser.add_argument("--idle-timeout", type=float, help="Seconds of caller inactivity before final warning (default: 45; 0 disables)")
+    parser.add_argument("--idle-grace", type=float, help="Seconds to wait after the final idle warning (default: 20)")
+    parser.add_argument("--idle-checkin", type=float, help="Seconds before a friendly audibility check (default: 15; 0 disables)")
     parser.add_argument("--speech-pause", type=int, help="Silence in milliseconds before a spoken turn ends (default: 1500)")
     parser.add_argument("--demo-customer", help="Trusted operator selection of a SYNTHETIC customer fixture; not production authentication")
     parser.add_argument("--no-database", action="store_true", help="Disable MongoDB tools")
@@ -79,7 +80,8 @@ def main(argv=None):
             from .speech_input import SpeechSettings
             speech_settings = SpeechSettings.load(language=args.stt_language, device=args.input_device,
                 voice=args.tts_voice, output_device=args.output_device, audio_output=not args.silent,
-                idle_timeout=args.idle_timeout, idle_grace=args.idle_grace, endpointing_ms=args.speech_pause)
+                idle_timeout=args.idle_timeout, idle_grace=args.idle_grace, endpointing_ms=args.speech_pause,
+                idle_checkin=args.idle_checkin)
         service, client = database_service(args.demo_customer, args.no_database)
         settings = Settings.load()
         application = build_application(settings, source=args.source,

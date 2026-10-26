@@ -30,7 +30,7 @@ needed for the demo. Say “please end the call” to finish.
 - Keep conversational text context instead of restarting every exchange.
 - Retrieve account and subscription facts through authenticated, read-only tools.
 - Leave callers time to breathe: **1.5-second turn pause**, configurable per business.
-- End idle calls after a **3-minute check-in plus 45-second grace period**.
+- End idle calls after a **15-second audibility check, 45-second warning and 20-second grace period**.
 - Model operating costs before expanding a supervised pilot.
 
 These are capabilities and testable operational hypotheses, not measured profit

@@ -47,11 +47,13 @@ only on a subsequent affirmative answer. A no keeps it open; a new question canc
 the pending hang-up prompt. An unrelated yes, including recharge confirmation, does
 not authorize a hang-up. End-call confirmation is separate from account operations.
 
-After 180 seconds without recognized caller words, Maya asks if the caller is still
-there. After another 45 seconds without a response, she says goodbye and disconnects.
+After 15 seconds without recognized caller words, Maya checks: "Hello again. Can
+you hear me?" At 45 seconds of caller inactivity she gives the final still-there
+warning. After another 20 seconds without a response, she says goodbye and disconnects.
+Audibility confirmations stay separate from account and hang-up confirmations.
 Recognized caller activity resets the idle deadline; raw microphone noise does not.
 Backend processing and assistant playback do not consume the caller's idle budget.
-Configure `.env` with `CALL_IDLE_TIMEOUT_SECONDS` and `CALL_IDLE_GRACE_SECONDS`, or
+Configure `.env` with `CALL_IDLE_TIMEOUT_SECONDS` and `CALL_IDLE_GRACE_SECONDS`, plus `CALL_IDLE_CHECKIN_SECONDS` for the first hint, or
 use `--idle-timeout SECONDS --idle-grace SECONDS`. A timeout of zero disables idle
 disconnect. Grace must be positive. This closes the current local audio session;
 there is no PSTN/telephony provider integrated into this CLI.

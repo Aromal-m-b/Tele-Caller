@@ -32,8 +32,8 @@ breathe or think, open a terminal in the folder and run:
 ```
 
 Or set `DEEPGRAM_ENDPOINTING_MS=2500` in `.env`. A longer pause reduces premature
-answers but makes replies start later. Caller inactivity is separate: three minutes
-to a check-in, then 45 seconds before disconnect. Change `CALL_IDLE_TIMEOUT_SECONDS`
+answers but makes replies start later. Caller inactivity is separate: a friendly audibility check after 15 seconds,
+a final warning at 45 seconds, then 20 seconds before disconnect. Change `CALL_IDLE_TIMEOUT_SECONDS`
 and `CALL_IDLE_GRACE_SECONDS`; zero timeout disables idle disconnect.
 
 ## Add approved business knowledge

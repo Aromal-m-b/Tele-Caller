@@ -34,24 +34,26 @@ class SpeechSettings:
     tts_model: str = "aura-2-andromeda-en"
     output_device: int | None = None
     audio_output: bool = False
-    idle_timeout_seconds: float = 180
-    idle_grace_seconds: float = 45
+    idle_timeout_seconds: float = 45
+    idle_grace_seconds: float = 20
+    idle_checkin_seconds: float = 15
 
     @classmethod
     def load(cls, *, language=None, device=None, voice=None, output_device=None, audio_output=True,
-             idle_timeout=None, idle_grace=None, endpointing_ms=None):
+             idle_timeout=None, idle_grace=None, endpointing_ms=None, idle_checkin=None):
         load_dotenv(ROOT / ".env")
         key = os.getenv("DEEPGRAM") or os.getenv("DEEPGRAM_API_KEY")
         if not key:
             raise SpeechInputError("Set DEEPGRAM (or DEEPGRAM_API_KEY) in the project .env for microphone input.")
         import math
         try:
-            timeout = float(idle_timeout if idle_timeout is not None else os.getenv("CALL_IDLE_TIMEOUT_SECONDS", "180"))
-            grace = float(idle_grace if idle_grace is not None else os.getenv("CALL_IDLE_GRACE_SECONDS", "45"))
+            timeout = float(idle_timeout if idle_timeout is not None else os.getenv("CALL_IDLE_TIMEOUT_SECONDS", "45"))
+            grace = float(idle_grace if idle_grace is not None else os.getenv("CALL_IDLE_GRACE_SECONDS", "20"))
+            checkin = float(idle_checkin if idle_checkin is not None else os.getenv("CALL_IDLE_CHECKIN_SECONDS", "15"))
             endpoint = int(endpointing_ms if endpointing_ms is not None else os.getenv("DEEPGRAM_ENDPOINTING_MS", "1500"))
             if not 500 <= endpoint <= 10000:
                 raise ValueError()
-            if not math.isfinite(timeout) or not math.isfinite(grace) or timeout < 0 or grace <= 0:
+            if not all(math.isfinite(v) for v in (timeout, grace, checkin)) or timeout < 0 or grace <= 0 or checkin < 0:
                 raise ValueError()
         except (ValueError, TypeError):
             raise SpeechInputError("Idle timeout must be zero or positive, grace positive, and speech pause between 500 and 10000 ms.") from None
@@ -59,7 +61,8 @@ class SpeechSettings:
                    language=language or os.getenv("DEEPGRAM_STT_LANGUAGE", "en-US"), device=device,
                    tts_model=voice or os.getenv("DEEPGRAM_TTS_MODEL", "aura-2-andromeda-en"),
                    output_device=output_device, audio_output=audio_output,
-                   idle_timeout_seconds=timeout, idle_grace_seconds=grace, endpointing_ms=endpoint)
+                   idle_timeout_seconds=timeout, idle_grace_seconds=grace, endpointing_ms=endpoint,
+                   idle_checkin_seconds=checkin)
 
     @property
     def url(self):
@@ -150,10 +153,12 @@ def spoken_command(text):
 
 
 async def process_turns(application, turns, *, write=print, clock=time.monotonic, speaker=None,
-                        control=None, idle_timeout=180, idle_grace=45):
+                        control=None, idle_timeout=45, idle_grace=20, idle_checkin=0):
     from .call_control import CallControl
     control = control or CallControl(clock=clock)
     warned_at = None
+    hinted_for = None
+    presence_prompt = False
     last_answer_at = float("-inf")
     async def emit(answer, spoken=None, *, ending=False):
         write("A: " + answer)
@@ -179,9 +184,13 @@ async def process_turns(application, turns, *, write=print, clock=time.monotonic
         await emit(answer)
     control.touch()
     while True:
+        if hinted_for is not None and control.last_activity > hinted_for:
+            hinted_for = None
         try:
             if idle_timeout:
                 deadline = (warned_at + idle_grace) if warned_at is not None else (control.last_activity + idle_timeout)
+                if warned_at is None and hinted_for is None and 0 < idle_checkin < idle_timeout:
+                    deadline = min(deadline, control.last_activity + idle_checkin)
                 turn = await asyncio.wait_for(turns.get(), max(.001, deadline - clock()))
             else:
                 turn = await turns.get()
@@ -190,8 +199,20 @@ async def process_turns(application, turns, *, write=print, clock=time.monotonic
                 warned_at = None
                 continue
             if warned_at is None:
+                if hinted_for is None and 0 < idle_checkin < idle_timeout and clock() >= control.last_activity + idle_checkin:
+                    before, began = control.last_activity, clock()
+                    control.pending = False
+                    presence_prompt = True
+                    await emit("Hello again. Can you hear me?")
+                    # Check-in playback does not count against the caller's wait.
+                    if control.last_activity == before:
+                        control.last_activity += clock() - began
+                        hinted_for = control.last_activity
+                    continue
                 if clock() < control.last_activity + idle_timeout:
                     continue
+                control.pending = False
+                presence_prompt = True
                 await emit("Are you still there? Please say something if you'd like to keep the call open.")
                 control.touch()
                 warned_at = clock()
@@ -204,11 +225,26 @@ async def process_turns(application, turns, *, write=print, clock=time.monotonic
                 return
             control.touch()
             warned_at = None
+            hinted_for = None
             action = control.decide(turn.text, started_at=turn.started_at)
             if action == "end":
                 await emit("Thanks for calling Sun Direct. Goodbye!", ending=True)
                 return
             write("You: " + turn.text)
+            if presence_prompt:
+                presence_prompt = False
+                from .account_tools import explicit_confirmation
+                if explicit_confirmation(spoken_command(turn.text)) or spoken_command(turn.text) in {"im here", "i am here", "i can hear you", "hello"}:
+                    await emit("Thanks, I'm here. Go ahead.")
+                    control.touch()
+                    continue
+                if spoken_command(turn.text) in {"no", "not really", "i cant hear you"}:
+                    spoken = (getattr(application, "last_answer_speech", None)
+                              or getattr(application, "last_answer", None)
+                              or "My replies also appear on screen. Please check your speaker volume.")
+                    await emit(spoken)
+                    control.touch()
+                    continue
             if action == "ask":
                 await emit("Would you like me to end the call?")
                 control.asked()
@@ -362,7 +398,8 @@ async def _microphone_session(application, settings, *, microphone_factory=Micro
                 sender = asyncio.create_task(send_audio())
                 receiver = asyncio.create_task(receive_transcripts())
                 processor = asyncio.create_task(process_turns(application, turns, write=write, clock=clock, speaker=speaker,
-                    control=control, idle_timeout=settings.idle_timeout_seconds, idle_grace=settings.idle_grace_seconds))
+                    control=control, idle_timeout=settings.idle_timeout_seconds, idle_grace=settings.idle_grace_seconds,
+                    idle_checkin=settings.idle_checkin_seconds))
                 tasks = [sender, receiver, processor]
                 write("Listening. " + ("You can interrupt a spoken reply. Use headphones to reduce speaker echo. " if speaker else "Speak your question; answers appear here. ")
                       + "Say 'stop listening' or press Ctrl+C to exit.")

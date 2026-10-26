@@ -45,8 +45,9 @@ FAISS metadata uses pickle. The included demo builder never overwrites an index.
 | DEEPGRAM_STT_MODEL | nova-3 |
 | DEEPGRAM_TTS_MODEL | aura-2-andromeda-en |
 | DEEPGRAM_ENDPOINTING_MS | 1500; raise for longer breathing/thinking pauses |
-| CALL_IDLE_TIMEOUT_SECONDS | 180; zero disables idle disconnect |
-| CALL_IDLE_GRACE_SECONDS | 45 |
+| CALL_IDLE_CHECKIN_SECONDS | 15; zero disables the early audibility check |
+| CALL_IDLE_TIMEOUT_SECONDS | 45; zero disables idle disconnect |
+| CALL_IDLE_GRACE_SECONDS | 20 |
 | MONGODB_URI | optional; keep in local .env/secret storage |
 
 Configuration secrets are not committed. Account tools have no write, payment or
