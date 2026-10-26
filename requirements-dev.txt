@@ -1,0 +1,4 @@
+-r requirements.txt
+pytest>=9,<10
+mongomock>=4.3,<5
+Pillow>=10,<13

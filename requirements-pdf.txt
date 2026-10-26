@@ -1,0 +1,4 @@
+-r requirements.txt
+docling>=2.142,<3
+paddleocr>=3.7,<4
+paddlepaddle>=3.3,<4

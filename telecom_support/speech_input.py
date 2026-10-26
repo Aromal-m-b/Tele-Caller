@@ -1,0 +1,396 @@
+"""Deepgram microphone input for the existing text/account support application.
+
+Adapted from caller_stream.py: 16 kHz mono PCM over listen/v1. Backend work is
+serialized in a worker thread so it never blocks microphone or WebSocket traffic.
+"""
+import asyncio
+from contextlib import suppress
+from dataclasses import dataclass, field
+import json
+import os
+import re
+import time
+from urllib.parse import urlencode
+
+from dotenv import load_dotenv
+
+from .settings import ROOT
+from voice_support.transcripts import TranscriptBuffer
+
+STOP_COMMANDS = {"stop listening", "end call", "quit", "exit"}
+
+
+class SpeechInputError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class SpeechSettings:
+    api_key: str = field(repr=False)
+    model: str = "nova-3"
+    language: str = "en-US"
+    device: int | None = None
+    endpointing_ms: int = 1500
+    tts_model: str = "aura-2-andromeda-en"
+    output_device: int | None = None
+    audio_output: bool = False
+    idle_timeout_seconds: float = 180
+    idle_grace_seconds: float = 45
+
+    @classmethod
+    def load(cls, *, language=None, device=None, voice=None, output_device=None, audio_output=True,
+             idle_timeout=None, idle_grace=None, endpointing_ms=None):
+        load_dotenv(ROOT / ".env")
+        key = os.getenv("DEEPGRAM") or os.getenv("DEEPGRAM_API_KEY")
+        if not key:
+            raise SpeechInputError("Set DEEPGRAM (or DEEPGRAM_API_KEY) in the project .env for microphone input.")
+        import math
+        try:
+            timeout = float(idle_timeout if idle_timeout is not None else os.getenv("CALL_IDLE_TIMEOUT_SECONDS", "180"))
+            grace = float(idle_grace if idle_grace is not None else os.getenv("CALL_IDLE_GRACE_SECONDS", "45"))
+            endpoint = int(endpointing_ms if endpointing_ms is not None else os.getenv("DEEPGRAM_ENDPOINTING_MS", "1500"))
+            if not 500 <= endpoint <= 10000:
+                raise ValueError()
+            if not math.isfinite(timeout) or not math.isfinite(grace) or timeout < 0 or grace <= 0:
+                raise ValueError()
+        except (ValueError, TypeError):
+            raise SpeechInputError("Idle timeout must be zero or positive, grace positive, and speech pause between 500 and 10000 ms.") from None
+        return cls(api_key=key, model=os.getenv("DEEPGRAM_STT_MODEL", "nova-3"),
+                   language=language or os.getenv("DEEPGRAM_STT_LANGUAGE", "en-US"), device=device,
+                   tts_model=voice or os.getenv("DEEPGRAM_TTS_MODEL", "aura-2-andromeda-en"),
+                   output_device=output_device, audio_output=audio_output,
+                   idle_timeout_seconds=timeout, idle_grace_seconds=grace, endpointing_ms=endpoint)
+
+    @property
+    def url(self):
+        params = dict(model=self.model, language=self.language, smart_format="true",
+                      encoding="linear16", sample_rate=16000, channels=1,
+                      endpointing=self.endpointing_ms, interim_results="true",
+                      utterance_end_ms=max(2000, self.endpointing_ms + 500), vad_events="true", punctuate="true")
+        return "wss://api.deepgram.com/v1/listen?" + urlencode(params)
+
+
+class MicrophoneSource:
+    """Callback-based capture: device reads cannot strand a cancelled executor thread."""
+    def __init__(self, *, device=None):
+        self.device = device
+        self.audio = self.stream = None
+        self.queue = asyncio.Queue(maxsize=64)
+        self.closed = False
+        self.error = None
+
+    def _feed(self, data, status):
+        if self.closed:
+            return
+        if status or self.queue.full():
+            self.error = SpeechInputError("Microphone audio overflowed. Check the input device and retry.")
+            if not self.queue.full():
+                self.queue.put_nowait(b"")
+            return
+        self.queue.put_nowait(data)
+
+    async def __aenter__(self):
+        try:
+            import pyaudio
+            self.audio = pyaudio.PyAudio()
+            loop = asyncio.get_running_loop()
+            def callback(data, frames, timing, status):
+                if self.closed:
+                    return None, pyaudio.paAbort
+                try:
+                    loop.call_soon_threadsafe(self._feed, data, status)
+                except RuntimeError:
+                    return None, pyaudio.paAbort
+                return None, pyaudio.paContinue
+            self.stream = self.audio.open(format=pyaudio.paInt16, channels=1, rate=16000,
+                input=True, input_device_index=self.device, frames_per_buffer=1024,
+                stream_callback=callback, start=False)
+            self.stream.start_stream()
+        except Exception:
+            await self.close()
+            raise SpeechInputError("Could not open the microphone at 16 kHz mono. Check microphone permission, the selected device, and the PyAudio installation.") from None
+        return self
+
+    async def read(self):
+        if self.error:
+            raise self.error
+        data = await self.queue.get()
+        if self.error:
+            raise self.error
+        return data
+
+    async def close(self):
+        self.closed = True
+        def release():
+            try:
+                if self.stream is not None:
+                    with suppress(Exception):
+                        self.stream.stop_stream()
+                    with suppress(Exception):
+                        self.stream.close()
+                    self.stream = None
+            finally:
+                if self.audio is not None:
+                    self.audio.terminate()
+                    self.audio = None
+        await asyncio.to_thread(release)
+
+    async def __aexit__(self, *args):
+        await self.close()
+
+
+@dataclass(frozen=True)
+class SpokenTurn:
+    text: str
+    started_at: float
+
+
+def spoken_command(text):
+    return re.sub(r"[^\w\s]", "", text.lower()).strip()
+
+
+async def process_turns(application, turns, *, write=print, clock=time.monotonic, speaker=None,
+                        control=None, idle_timeout=180, idle_grace=45):
+    from .call_control import CallControl
+    control = control or CallControl(clock=clock)
+    warned_at = None
+    last_answer_at = float("-inf")
+    async def emit(answer, spoken=None, *, ending=False):
+        write("A: " + answer)
+        if speaker is not None:
+            from .speech_output import SpeechOutputError
+            try:
+                await speaker.speak(spoken if spoken is not None else answer)
+                if callable(getattr(speaker, "wait_ready", None)):
+                    await speaker.wait_ready()
+                if not ending:
+                    write("Listening...")
+            except SpeechOutputError:
+                write("Speech playback is unavailable; please read the answer above.")
+    opening = getattr(application, "start_conversation", None)
+    if callable(opening):
+        generation = asyncio.create_task(asyncio.to_thread(opening))
+        try:
+            answer = await asyncio.shield(generation)
+        except asyncio.CancelledError:
+            with suppress(Exception):
+                await generation
+            raise
+        await emit(answer)
+    control.touch()
+    while True:
+        try:
+            if idle_timeout:
+                deadline = (warned_at + idle_grace) if warned_at is not None else (control.last_activity + idle_timeout)
+                turn = await asyncio.wait_for(turns.get(), max(.001, deadline - clock()))
+            else:
+                turn = await turns.get()
+        except asyncio.TimeoutError:
+            if warned_at is not None and control.last_activity > warned_at:
+                warned_at = None
+                continue
+            if warned_at is None:
+                if clock() < control.last_activity + idle_timeout:
+                    continue
+                await emit("Are you still there? Please say something if you'd like to keep the call open.")
+                control.touch()
+                warned_at = clock()
+            else:
+                await emit("I haven't heard from you, so I'll end the call now. You're welcome to call again. Goodbye!", ending=True)
+                return
+            continue
+        try:
+            if turn is None:
+                return
+            control.touch()
+            warned_at = None
+            action = control.decide(turn.text, started_at=turn.started_at)
+            if action == "end":
+                await emit("Thanks for calling Sun Direct. Goodbye!", ending=True)
+                return
+            write("You: " + turn.text)
+            if action == "ask":
+                await emit("Would you like me to end the call?")
+                control.asked()
+                control.touch()
+                continue
+            if action == "stay":
+                await emit("Of course, we'll keep the call open. What else would you like help with?")
+                control.touch()
+                continue
+            agent = getattr(application, "account_agent", None)
+            if agent and agent.service.pending_recharge:
+                from .account_tools import explicit_confirmation
+                if explicit_confirmation(spoken_command(turn.text)) and turn.started_at < last_answer_at:
+                    await emit("Please confirm again now that the package details have been presented.")
+                    last_answer_at = clock()
+                    continue
+            # Deepgram punctuates utterances; the existing confirmation check accepts
+            # punctuation. Other customer text is passed through without rewriting.
+            generation = asyncio.create_task(asyncio.to_thread(application.generate, turn.text))
+            try:
+                answer = await asyncio.shield(generation)
+            except asyncio.CancelledError:
+                # A synchronous request cannot be cancelled safely halfway through.
+                # Let it finish before the CLI closes MongoDB or discards session state.
+                with suppress(Exception):
+                    await generation
+                raise
+            except Exception:
+                await emit("I couldn't complete that request. Please try again.")
+                continue
+            await emit(answer, getattr(application, "last_spoken_response", None))
+            if getattr(application, "call_action", None) == "confirm_end":
+                await emit("Would you like me to end the call?")
+                control.asked()
+            control.touch()
+            last_answer_at = float("inf") if speaker is not None and getattr(speaker, "interrupted", False) else clock()
+        finally:
+            turns.task_done()
+
+
+async def run_microphone(application, settings, *, microphone_factory=MicrophoneSource,
+                         connect_factory=None, write=print, clock=time.monotonic, speaker_factory=None):
+    if settings.audio_output:
+        from .speech_output import DeepgramSpeechOutput
+        factory = speaker_factory or DeepgramSpeechOutput
+        async with factory(settings) as speaker:
+            return await _microphone_session(application, settings, microphone_factory=microphone_factory,
+                connect_factory=connect_factory, write=write, clock=clock, speaker=speaker)
+    return await _microphone_session(application, settings, microphone_factory=microphone_factory,
+        connect_factory=connect_factory, write=write, clock=clock)
+
+
+async def _microphone_session(application, settings, *, microphone_factory=MicrophoneSource,
+                              connect_factory=None, write=print, clock=time.monotonic, speaker=None):
+    if connect_factory is None:
+        try:
+            from websockets.asyncio.client import connect
+        except ImportError:
+            raise SpeechInputError("Install microphone dependencies with pip install -r requirements.txt.") from None
+        connect_factory = connect
+    tasks = []
+    try:
+        async with connect_factory(settings.url, additional_headers={"Authorization": "Token " + settings.api_key},
+                                   max_size=2**20, open_timeout=15, close_timeout=5) as socket:
+            async with microphone_factory(device=settings.device) as microphone:
+                turns = asyncio.Queue(maxsize=32)
+                stop_requested = asyncio.Event()
+                candidate_until = 0
+                from .call_control import CallControl
+                control = CallControl(clock=clock)
+
+                async def send_audio():
+                    nonlocal candidate_until
+                    last_keepalive = float("-inf")
+                    while True:
+                        data = await microphone.read()
+                        if not data:
+                            await socket.send(json.dumps({"type": "CloseStream"}))
+                            return
+                        if speaker is not None and speaker.mute_microphone:
+                            observe = getattr(speaker, "observe_microphone", None)
+                            preroll = observe(data) if callable(observe) else None
+                            if preroll is not None:
+                                # Upload the start of the interruption too, not just
+                                # the audio captured after speech detection fired.
+                                candidate_until = clock() + 1.5
+                                await socket.send(preroll)
+                                continue
+                            if clock() < candidate_until:
+                                await socket.send(data)
+                                continue
+                            if clock() - last_keepalive >= 3:
+                                await socket.send(json.dumps({"type": "KeepAlive"}))
+                                last_keepalive = clock()
+                            continue
+                        await socket.send(data)
+
+                async def receive_transcripts():
+                    buffer = TranscriptBuffer()
+                    started_at = None
+                    playback_epoch = speaker.epoch if speaker else 0
+                    awaiting_fresh_speech = False
+                    async for raw in socket:
+                        event = json.loads(raw)
+                        kind = event.get("type")
+                        if kind == "Error":
+                            raise SpeechInputError("Deepgram reported a transcription error. Check its model/language configuration and retry.")
+                        if speaker is not None:
+                            if speaker.epoch != playback_epoch:
+                                playback_epoch = speaker.epoch
+                                buffer, started_at = TranscriptBuffer(), None
+                                awaiting_fresh_speech = True
+                            if speaker.mute_microphone:
+                                confirms = getattr(speaker, "confirms_interruption", None)
+                                if (getattr(speaker, "speaking", False) and clock() < candidate_until
+                                        and callable(confirms) and confirms(event)):
+                                    speaker.interrupt()
+                                    awaiting_fresh_speech = False
+                                    started_at = clock()
+                                else:
+                                    buffer, started_at = TranscriptBuffer(), None
+                                    continue
+                            if awaiting_fresh_speech:
+                                if kind == "SpeechStarted":
+                                    awaiting_fresh_speech = False
+                                elif kind in {"Results", "UtteranceEnd"}:
+                                    continue
+                        if kind == "SpeechStarted" and started_at is None:
+                            started_at = clock()
+                        if kind == "Results" and started_at is None:
+                            alternatives = event.get("channel", {}).get("alternatives", [])
+                            if alternatives and alternatives[0].get("transcript", "").strip():
+                                started_at = clock()
+                        if kind == "Results":
+                            alternatives = event.get("channel", {}).get("alternatives", [])
+                            if (alternatives and alternatives[0].get("transcript", "").strip()
+                                    and alternatives[0].get("confidence", 1) >= .5):
+                                control.touch()
+                        text = buffer.consume(event)
+                        if text:
+                            from .call_control import direct_end_request
+                            if direct_end_request(text):
+                                stop_requested.set()
+                                return
+                            if turns.full():
+                                raise SpeechInputError("Too many spoken turns are waiting. Please pause for the assistant's reply and restart.")
+                            turns.put_nowait(SpokenTurn(text, started_at if started_at is not None else clock()))
+                            started_at = None
+                    await turns.put(None)
+
+                sender = asyncio.create_task(send_audio())
+                receiver = asyncio.create_task(receive_transcripts())
+                processor = asyncio.create_task(process_turns(application, turns, write=write, clock=clock, speaker=speaker,
+                    control=control, idle_timeout=settings.idle_timeout_seconds, idle_grace=settings.idle_grace_seconds))
+                tasks = [sender, receiver, processor]
+                write("Listening. " + ("You can interrupt a spoken reply. Use headphones to reduce speaker echo. " if speaker else "Speak your question; answers appear here. ")
+                      + "Say 'stop listening' or press Ctrl+C to exit.")
+                done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                if processor in done:
+                    await processor
+                elif receiver in done:
+                    await receiver
+                    sender.cancel()
+                    if stop_requested.is_set():
+                        processor.cancel()
+                        await asyncio.gather(processor, return_exceptions=True)
+                        write("Goodbye!")
+                        if speaker is not None:
+                            from .speech_output import SpeechOutputError
+                            with suppress(SpeechOutputError, asyncio.TimeoutError):
+                                await asyncio.wait_for(speaker.speak("Thanks for calling Sun Direct. Goodbye!"), 5)
+                    else:
+                        await processor
+                else:
+                    await sender
+                    await asyncio.wait_for(receiver, timeout=15)
+                    await processor
+    except (SpeechInputError, asyncio.CancelledError):
+        raise
+    except Exception as exc:
+        raise SpeechInputError(f"Speech input stopped ({type(exc).__name__}). Check the Deepgram key, connection and audio device.") from None
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
