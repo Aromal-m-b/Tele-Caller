@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import os
 
 from .settings import DEFAULT_URL, Settings
 
@@ -70,10 +71,11 @@ def main(argv=None):
     parser.add_argument("--idle-checkin", type=float, help="Seconds before a friendly audibility check (default: 15; 0 disables)")
     parser.add_argument("--speech-pause", type=int, help="Silence in milliseconds before a spoken turn ends (default: 1500)")
     parser.add_argument("--demo-customer", help="Trusted operator selection of a SYNTHETIC customer fixture; not production authentication")
+    parser.add_argument("--caller-number", help="Simulated caller; defaults to CALLER_PHONE in .env")
     parser.add_argument("--no-database", action="store_true", help="Disable MongoDB tools")
     args = parser.parse_args(argv)
     from .rag import build_application
-    application, client = None, None
+    application, client, audit = None, None, None
     try:
         speech_settings = None
         if args.question is None and not args.text:
@@ -84,9 +86,28 @@ def main(argv=None):
                 idle_checkin=args.idle_checkin)
         service, client = database_service(args.demo_customer, args.no_database)
         settings = Settings.load()
+        from .call_audit import CallAudit
+        from .caller import CallerSession
+        from .tickets import TicketService
+        from .settings import ROOT
+        caller_phone = args.caller_number or os.getenv("CALLER_PHONE") or "0000000000"
+        audit = CallAudit(ROOT / "output" / "calls", caller=caller_phone, model=settings.model)
+        audit.mode = "text" if args.text or args.question is not None else "voice"
+        caller = CallerSession(service, caller_phone, call_id=audit.call_id, audit=audit)
+        if service and args.demo_customer:
+            from .account_tools import CustomerIdentity
+            service.identity = CustomerIdentity(args.demo_customer, verified=True, synthetic_demo=True)
+            caller.bind(service._customer())
+        if service:
+            service.caller_session = caller
+            service.ticket_service = TicketService(service, os.getenv("SUPPORT_TICKET_TEMPLATE", ""), ROOT / "output" / "tickets", call_id=audit.call_id)
         application = build_application(settings, source=args.source,
                                         url=args.url, index_dir=args.index_dir,
-                                        account_service=service, database_client=client)
+                                        account_service=service, database_client=client, audit=audit)
+        application.caller_session, application.audit = caller, audit
+        if args.question is None:
+            print("Incoming simulated call: " + caller.phone + (" (registered synthetic customer)" if caller.customer else " (guest)"))
+            print("Transcript and usage log: " + str(audit.path))
         if args.question is not None:
             print(application.generate(args.question))
         else:
@@ -101,7 +122,11 @@ def main(argv=None):
             else:
                 from .speech_input import run_microphone
                 try:
-                    asyncio.run(run_microphone(application, speech_settings))
+                    def write(line):
+                        if line.startswith("You: ") and caller.stage:
+                            audit.redact(line[5:])
+                        audit.write(line)
+                    asyncio.run(run_microphone(application, speech_settings, write=write))
                 except KeyboardInterrupt:
                     print("\nStopped listening.")
     except RuntimeError as exc:
@@ -114,7 +139,10 @@ def main(argv=None):
     except (ValueError, FileNotFoundError) as exc:
         parser.exit(1, f"Startup failed: {exc}\n")
     finally:
-        if application is not None and callable(getattr(application, "close", None)):
-            application.close()
-        elif client is not None:
-            client.close()
+        try:
+            if audit is not None: audit.close()
+        finally:
+            if application is not None and callable(getattr(application, "close", None)):
+                application.close()
+            elif client is not None:
+                client.close()

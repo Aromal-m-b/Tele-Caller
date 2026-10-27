@@ -253,7 +253,7 @@ def test_cli_defaults_to_audio_and_text_mode_is_explicit(monkeypatch):
         return SpeechSettings("fake")
     monkeypatch.setattr(speech.SpeechSettings, "load", settings)
     called = []
-    async def microphone(app, settings):
+    async def microphone(app, settings, **kwargs):
         called.append(app)
     menu = Mock()
     monkeypatch.setattr(speech, "run_microphone", microphone)

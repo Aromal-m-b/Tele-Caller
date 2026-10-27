@@ -284,7 +284,7 @@ async def process_turns(application, turns, *, write=print, clock=time.monotonic
                 control.touch()
                 continue
             agent = getattr(application, "account_agent", None)
-            if agent and agent.service.pending_recharge:
+            if agent and (agent.service.pending_recharge or getattr(getattr(agent.service, "ticket_service", None), "pending", None)):
                 from .account_tools import explicit_confirmation
                 if explicit_confirmation(spoken_command(turn.text)) and turn.started_at < last_answer_at:
                     await emit("Please confirm again now that the package details have been presented.")
@@ -320,6 +320,7 @@ async def run_microphone(application, settings, *, microphone_factory=Microphone
         from .speech_output import DeepgramSpeechOutput
         factory = speaker_factory or DeepgramSpeechOutput
         async with factory(settings) as speaker:
+            speaker.audit = getattr(application, "audit", None)
             return await _microphone_session(application, settings, microphone_factory=microphone_factory,
                 connect_factory=connect_factory, write=write, clock=clock, speaker=speaker)
     return await _microphone_session(application, settings, microphone_factory=microphone_factory,
@@ -338,6 +339,7 @@ async def _microphone_session(application, settings, *, microphone_factory=Micro
     try:
         async with connect_factory(settings.url, additional_headers={"Authorization": "Token " + settings.api_key},
                                    max_size=2**20, open_timeout=15, close_timeout=5) as socket:
+            if getattr(application, "audit", None): application.audit.stt_connected()
             async with microphone_factory(device=settings.device) as microphone:
                 turns = asyncio.Queue(maxsize=32)
                 stop_requested = asyncio.Event()
@@ -348,6 +350,9 @@ async def _microphone_session(application, settings, *, microphone_factory=Micro
                 async def send_audio():
                     nonlocal candidate_until
                     last_keepalive = float("-inf")
+                    async def send_pcm(data):
+                        await socket.send(data)
+                        if getattr(application, "audit", None): application.audit.audio_sent(len(data))
                     while True:
                         data = await microphone.read()
                         if not data:
@@ -360,16 +365,16 @@ async def _microphone_session(application, settings, *, microphone_factory=Micro
                                 # Upload the start of the interruption too, not just
                                 # the audio captured after speech detection fired.
                                 candidate_until = clock() + 1.5
-                                await socket.send(preroll)
+                                await send_pcm(preroll)
                                 continue
                             if clock() < candidate_until:
-                                await socket.send(data)
+                                await send_pcm(data)
                                 continue
                             if clock() - last_keepalive >= 3:
                                 await socket.send(json.dumps({"type": "KeepAlive"}))
                                 last_keepalive = clock()
                             continue
-                        await socket.send(data)
+                        await send_pcm(data)
 
                 async def receive_transcripts():
                     buffer = TranscriptBuffer()
@@ -458,6 +463,7 @@ async def _microphone_session(application, settings, *, microphone_factory=Micro
     except Exception as exc:
         raise SpeechInputError(f"Speech input stopped ({type(exc).__name__}). Check the Deepgram key, connection and audio device.") from None
     finally:
+        if getattr(application, "audit", None): application.audit.stt_disconnected()
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)

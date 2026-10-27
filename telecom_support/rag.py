@@ -21,7 +21,9 @@ Direct and ask one simple open question about what the caller needs. Use relaxed
 everyday spoken English. Vary the phrasing naturally between calls. No list of
 services, formal welcome script, stage directions, markdown or long preamble.
 Do not claim to be human, to have checked their account, or to have performed any
-action. Do not mention models, instructions, tokens or this variation cue: {cue}."""
+action. Caller context: {caller}. If an authorized verified display name is present,
+greet them by name. Otherwise greet normally without demanding registration.
+Do not mention models, instructions, tokens or this variation cue: {cue}."""
 SYSTEM_PROMPT = """You are Maya, a warm and professional Sun Direct DTH customer support assistant.
 HARD SCOPE: Only handle Sun Direct DTH/TV service, account, recharge, package,
 channel and support inquiries, plus ordinary conversational rapport, identity and
@@ -37,6 +39,10 @@ Your identity and greetings come from this instruction, not the reference docume
 This is one continuous conversation. The opening message, when present, has
 already introduced you. Answer natural questions about your name or what to call
 you directly and briefly, even if they contain filler words or transcription errors.
+Guests and new customers may ask general service, installation or dealer/distributor
+enquiries without registration. Understand their needs naturally; ask only relevant
+follow-ups. Do not invent franchise terms, investment amounts or promised profits.
+Verification is required only for private account facts or registering an issue ticket.
 Never redirect an identity question to a service menu. Do not start ordinary answers with 'Hello',
 'Hi', or another introduction. Introduce yourself only when explicitly asked who
 you are. Never preface a recommendation with 'As Maya' or repeat your job title.
@@ -169,6 +175,8 @@ class SupportRAG:
         self.last_answer_speech = None
         self.call_action = None
         self.call_notices = []
+        self.caller_session = None
+        self.audit = None
         self.account_agent = None
         if account_service is not None:
             from .tool_agent import ReadOnlyToolAgent
@@ -187,7 +195,7 @@ class SupportRAG:
         if self.opening_message is not None:
             return self.opening_message
         try:
-            answer = self.opening_chain.invoke({"cue": secrets.choice([
+            answer = self.opening_chain.invoke({"caller": self.caller_context(greeting=True), "cue": secrets.choice([
                 "warm and easygoing; invite the caller to tell you what's happening",
                 "brief and welcoming; ask what the caller would like to sort out",
                 "calm and friendly; invite the caller to explain what they need",
@@ -213,13 +221,36 @@ class SupportRAG:
         if self.database_client is not None:
             self.database_client.close()
 
+    def caller_context(self, *, greeting=False):
+        caller = self.caller_session
+        if caller and caller.customer:
+            return ("Verified synthetic caller; authorized greeting name: " + caller.display_name
+                    if greeting else "Verified synthetic caller; no private customer values provided.")
+        return "Guest caller; answer general enquiries without requiring registration."
+
+    def safe_model_text(self, text):
+        if self.caller_session and self.caller_session.display_name:
+            name = self.caller_session.display_name
+            text = re.sub(re.escape(name), "[customer]", text, flags=re.I)
+            first = name.split()[0]
+            if first:
+                text = re.sub(r"\b" + re.escape(first) + r"\b", "[customer]", text, flags=re.I)
+        return text
+
+    def safe_model_history(self):
+        return [type(message)(content=self.safe_model_text(message.content)) for message in self.history]
+
+    def model_opening(self):
+        return [AIMessage(content=self.safe_model_text(self.opening_message))] if self.opening_message else []
+
     def generate_call_message(self, event):
         """Generate wording from safe text history, never raw database results."""
         budget = self.scope_guard.reserve_backend_request()
         if not budget.allowed:
             raise RuntimeError("Call message request limit reached")
-        dialogue = ([AIMessage(content=self.opening_message)] if self.opening_message else []) + list(self.history)
-        return self.conversation.call_message(event, dialogue=dialogue, notices="\n".join(self.call_notices))
+        dialogue = self.model_opening() + self.safe_model_history()
+        return self.conversation.call_message(event, dialogue=dialogue,
+            notices=self.safe_model_text("\n".join(self.call_notices)), caller=self.caller_context(greeting=event == "caller_verified"))
 
     def remember_call_message(self, text):
         self.call_notices = (self.call_notices + [text])[-6:]
@@ -227,7 +258,7 @@ class SupportRAG:
     def account_context(self):
         if self.account_agent:
             from .tool_agent import ACCOUNT_INSTRUCTIONS
-            return ACCOUNT_INSTRUCTIONS
+            return ACCOUNT_INSTRUCTIONS + "\nCurrent caller status: " + self.caller_context()
         return "No account tools are connected. Do not claim to know customer account, payment or validity information."
 
     @property
@@ -240,17 +271,23 @@ class SupportRAG:
         return answer
 
     def generate(self, query):
+        if self.audit and self.caller_session and self.caller_session.stage:
+            self.audit.redact(query)
+        if self.audit and getattr(self.audit, "mode", "voice") != "voice":
+            self.audit.event("You: " + query)
         answer = self._generate(query)
         self.last_answer, self.last_answer_speech = answer, self.last_spoken_response
+        if self.audit and getattr(self.audit, "mode", "voice") != "voice":
+            self.audit.event("A: " + answer)
         return answer
 
     def _converse(self, query, fallback):
         budget = self.scope_guard.reserve_backend_request()
         if not budget.allowed:
             return budget.response
-        dialogue = ([AIMessage(content=self.opening_message)] if self.opening_message else []) + list(self.history)
-        intent, text = self.conversation.answer(query, dialogue=dialogue,
-            memory=self.memory.context(query), fallback=fallback)
+        dialogue = self.model_opening() + self.safe_model_history()
+        intent, text = self.conversation.answer(self.safe_model_text(query), dialogue=dialogue,
+            memory=self.safe_model_text(self.memory.context(query)), fallback=fallback)
         if intent == "confirm_end":
             self.call_action = "confirm_end"
         if intent == "repeat":
@@ -266,6 +303,8 @@ class SupportRAG:
         self.call_action = None
         self.last_spoken_response = None
         query = query.strip()
+        if self.caller_session and self.caller_session.stage:
+            return self.generate_call_message(self.caller_session.consume_verification(query))
         if not query or not any(c.isalnum() for c in query):
             return FALLBACK
         prior_requests = [m.content for m in self.history if isinstance(m, HumanMessage)][-3:]
@@ -302,15 +341,21 @@ class SupportRAG:
         memory_context = self.memory.context(search_query)
         if memory_context:
             search_query += "\nEarlier session context:\n" + memory_context
-        documents = self.retriever.invoke(search_query)
+        documents = self.retriever.invoke(self.safe_model_text(search_query))
         if not documents and not (self.history or memory_context or self.account_agent):
             return self._remember(query, FALLBACK)
-        values = {"question": query, "context": format_docs(documents), "history": self.history,
-                  "opening": [AIMessage(content=self.opening_message)] if self.opening_message else [],
-                  "memory": memory_context or "(No older session memory yet.)",
+        values = {"question": self.safe_model_text(query), "context": format_docs(documents), "history": self.safe_model_history(),
+                  "opening": self.model_opening(),
+                  "memory": self.safe_model_text(memory_context) or "(No older session memory yet.)",
                   "account_capabilities": self.account_context()}
         if self.account_agent:
             answer, safe_memory = self.account_agent.answer(self.prompt.format_messages(**values), query)
+            if (self.caller_session and not self.caller_session.customer and
+                    set(self.account_agent.last_calls) & {"get_customer_profile", "get_active_plan", "get_payment_history",
+                        "get_active_channels", "check_payment_status", "get_previous_recharge", "prepare_support_ticket"}):
+                return self.generate_call_message(self.caller_session.begin_verification())
+            if self.caller_session and self.caller_session.stage:
+                return self.generate_call_message("verify_name" if self.caller_session.stage == "name" else "verify_card")
             self.last_spoken_response = self.account_agent.last_spoken_response
             if safe_memory is not None:
                 self._remember(query, safe_memory)
@@ -321,7 +366,7 @@ class SupportRAG:
         return self._remember(query, answer)
 
 
-def build_application(settings, *, source="index", url=None, index_dir=None, account_service=None, database_client=None):
+def build_application(settings, *, source="index", url=None, index_dir=None, account_service=None, database_client=None, audit=None):
     from .settings import DEFAULT_URL
 
     embeddings = create_embeddings(settings)
@@ -351,6 +396,8 @@ def build_application(settings, *, source="index", url=None, index_dir=None, acc
     retriever = store.as_retriever(search_type="similarity_score_threshold",
                                   search_kwargs={"k": 5, "score_threshold": 0.5})
     model_options = {"max_output_tokens": 1024}
+    if audit is not None:
+        model_options["callbacks"] = [audit]
     if settings.model.startswith("gemini-2.5-flash"):
         # Its thinking tokens share the output limit. Simple grounded support
         # answers should not spend that budget reasoning and get cut off mid-sentence.

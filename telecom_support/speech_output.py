@@ -122,6 +122,7 @@ class DeepgramSpeechOutput:
         self._playback_task = None
         self.interrupted = False
         self.current_text = ""
+        self.audit = None
 
     def observe_microphone(self, data):
         if not self.speaking:
@@ -153,6 +154,7 @@ class DeepgramSpeechOutput:
             self.speaking = False
             self.suppress_until = 0
             self._playback_task.cancel()
+            if self.audit: self.audit.event("Playback interrupted; the assistant response may not have been fully heard.")
 
     @property
     def mute_microphone(self):
@@ -212,6 +214,7 @@ class DeepgramSpeechOutput:
                 async with self.client.stream("POST", "https://api.deepgram.com/v1/speak",
                         params=params, json={"text": piece}) as response:
                     response.raise_for_status()
+                    if self.audit: self.audit.synthesized(len(piece))
                     pending = b""
                     async for chunk in response.aiter_bytes():
                         pending += chunk

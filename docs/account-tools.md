@@ -1,5 +1,10 @@
 # Read-only MongoDB account tools
 
+Account/subscription/payment operations remain read-only. A separate confirmed
+write now creates `support_tickets` and a local DOCX. See
+[callers, tickets and logs](callers-tickets-logs.md). Caller-number/name/card checks
+are a synthetic simulation, not production telephone authentication.
+
 The archived CSV loader was inspected but never executed. Its deployed database is
 `telecaller`, which contains all seven collections and record counts described in
 `metadata_csv.md`. The other documented name, `sundirect_support`, was empty when

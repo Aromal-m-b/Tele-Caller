@@ -70,7 +70,7 @@ configurable with `--idle-timeout` and `--idle-grace`. Zero idle timeout disable
 automatic idle disconnect. See [speech input](speech-input.md) and
 [speech output](speech-output.md) for interruption and data-flow behavior.
 
-Account tools are read-only and require trusted session identity. The synthetic
+Account operations remain read-only and require trusted identity; confirmed issue tickets are a separate write action. See [caller and ticket setup](callers-tickets-logs.md). The synthetic
 `--demo-customer` flag is not production authentication. There are no payment,
 renewal, carrier-call or human-transfer actions. See [architecture](architecture.md)
 for the additional components needed to host multiple businesses safely.

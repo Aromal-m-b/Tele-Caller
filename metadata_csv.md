@@ -6,6 +6,10 @@
 **Dataset Type:** Synthetic test data
 **Pricing:** Illustrative, not verified official Sun Direct pricing
 
+Counts below describe the original fixture. The optional caller seed adds a
+synthetic customer; confirmed issues add `support_tickets` records using the DOCX
+form fields. Payments and subscriptions remain unchanged.
+
 ## 1. Collections Overview
 
 | Collection | Records | Primary Key | Description |
@@ -38,6 +42,9 @@ MongoDB automatically generates an `_id` for each imported document unless one i
 | `registered_on` | Date string | Registration date |
 | `account_status` | String | Active / Suspended |
 | `data_type` | String | SYNTHETIC |
+| `username` | String optional | Registered username for local synthetic verification |
+| `phone_normalized` | String optional | Normalized +91 simulated caller lookup |
+| `smartcard_id` | String optional | Stored synthetic smartcard ID, checked locally and excluded from model context |
 
 **Primary Key:** `customer_id`
 

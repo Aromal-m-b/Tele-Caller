@@ -7,6 +7,12 @@ knowledge with FAISS, and answers in a natural female voice. It keeps text conte
 handles interruptions, repeats previous answers, and closes a call on request,
 after confirmation, or after an inactivity warning.
 
+Simulated caller-ID lookup personalizes greetings for registered synthetic callers.
+Guests may verify by username/smartcard for account access and confirmed issue
+tickets, or continue general enquiries without registration. Each call saves a
+private TXT transcript with actual Gemini tokens and estimated API costs.
+See [caller, ticket and logging setup](docs/callers-tickets-logs.md).
+
 The current reference application uses a **Sun Direct / telecom support example**.
 It is a local microphone application, not a hosted multi-tenant SaaS or a public
 telephone line. Adapting to another industry requires approved knowledge, a new
@@ -50,7 +56,9 @@ Assistant text → Deepgram Aura-2 Andromeda → speaker
 ```
 
 No Gemini Live API is used. Private database result values remain local and use
-safe spoken prompts. Each session keeps six recent text exchanges and a compressed,
+safe spoken prompts; separately approved display names are used only for greetings.
+Confirmed issue tickets are the narrow write exception to read-only account access.
+Each session keeps six recent text exchanges and a compressed,
 searchable older archive in RAM. Explicit abuse checks precede model/tool access.
 
 ## Developer commands

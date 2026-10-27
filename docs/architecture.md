@@ -50,8 +50,11 @@ FAISS metadata uses pickle. The included demo builder never overwrites an index.
 | CALL_IDLE_GRACE_SECONDS | 20 |
 | MONGODB_URI | optional; keep in local .env/secret storage |
 
-Configuration secrets are not committed. Account tools have no write, payment or
-renewal capability. The synthetic demo identity option is not production login.
+Configuration secrets are not committed. Account/payment/subscription tools remain
+read-only. Confirmed issue registration is a narrow write to `support_tickets`, with
+DOCX export. There is no payment or renewal capability. See
+[caller identity and logs](callers-tickets-logs.md) for the synthetic verification
+flow and per-call transcript/token/cost files.
 
 ## Moving from pilot to service
 

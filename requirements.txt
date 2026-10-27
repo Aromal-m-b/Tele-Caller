@@ -13,3 +13,4 @@ PyAudio>=0.2.14,<0.3
 httpx>=0.27,<1
 webrtcvad-wheels>=2.0.14,<3
 numpy>=1.26,<3
+lxml>=4.9,<7

@@ -80,6 +80,18 @@ class AccountTools:
         self.pending_recharge = None
         self.current_user_text = ""
         self.turn_number = 0
+        self.caller_session = None
+        self.ticket_service = None
+
+    def begin_customer_verification(self):
+        if self.caller_session is None:
+            raise ToolError("VERIFICATION_UNAVAILABLE", "Caller verification is not configured.")
+        return {"verification_event": self.caller_session.begin_verification()}
+
+    def prepare_support_ticket(self, issue_type, description, priority="Normal", contact_method="Phone"):
+        if not self.ticket_service:
+            raise ToolError("TICKET_UNAVAILABLE", "Ticket registration is not configured.")
+        return self.ticket_service.prepare(issue_type, description, priority, contact_method)
 
     def begin_turn(self, text):
         self.turn_number += 1
@@ -294,7 +306,7 @@ class AccountTools:
     def execute(self, name, arguments):
         allowed = {"get_customer_profile", "get_active_plan", "get_active_channels", "get_payment_history",
                    "check_payment_status", "get_previous_recharge", "confirm_recharge_choice",
-                   "list_bouquets", "compare_plans", "recommend_plan"}
+                   "list_bouquets", "compare_plans", "recommend_plan", "begin_customer_verification", "prepare_support_ticket"}
         try:
             if name not in allowed:
                 raise ToolError("UNKNOWN_TOOL", "This tool is not registered.")
