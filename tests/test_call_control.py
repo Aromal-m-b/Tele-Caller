@@ -243,3 +243,28 @@ def test_user_reply_during_idle_generation_prevents_stale_disconnect():
         task.cancel()
         with pytest.raises(asyncio.CancelledError): await task
     asyncio.run(run())
+
+
+def test_generated_hangup_question_does_not_need_second_confirmation_request():
+    async def run():
+        calls = []
+        def event(kind):
+            calls.append(kind)
+            assert kind == "goodbye"
+            return "Take care. Goodbye!"
+        app = SimpleNamespace(generate=lambda _: "Would you like me to end the call?",
+            call_action="confirm_end", generate_call_message=event)
+        turns = asyncio.Queue()
+        turns.put_nowait(SpokenTurn("I'm all set now, thanks", 11))
+        turns.put_nowait(SpokenTurn("yes please", 11))
+        await process_turns(app, turns, clock=lambda: 10, write=lambda _: None)
+        assert calls == ["goodbye"]
+    asyncio.run(run())
+
+
+def test_generic_question_cannot_substitute_for_end_permission():
+    from telecom_support.call_control import end_confirmation_question
+    assert not end_confirmation_question("Is there anything else you need?")
+    assert not end_confirmation_question("What should we do next?")
+    assert end_confirmation_question("Would you like me to end the call?")
+    assert end_confirmation_question("Shall we wrap up here?")

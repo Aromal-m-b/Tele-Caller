@@ -165,6 +165,34 @@ def test_conversational_requests_share_backend_rate_limit():
     assert "pause" in app.generate("Where are you from?")
 
 
+def test_account_only_queries_skip_embedding_retrieval():
+    from telecom_support.account_tools import AccountTools, CustomerIdentity
+    import mongomock
+    from tests.test_account_tools import RecordingModel
+    from langchain_core.messages import AIMessage
+    db = mongomock.MongoClient().test
+    db.customers.insert_one(dict(customer_id="demo", full_name="Synthetic Person", data_type="SYNTHETIC", account_status="Active"))
+    service = AccountTools(db, CustomerIdentity("demo", verified=True, synthetic_demo=True))
+    retriever = SimpleNamespace(invoke=Mock(side_effect=AssertionError("Account lookup must not embed a document query")))
+    model = RecordingModel(responses=[AIMessage(content="", tool_calls=[dict(name="get_customer_profile", args={}, id="profile")])])
+    app = SupportRAG(retriever, model, account_service=service)
+    assert "Synthetic Person" in app.generate("Show my account profile")
+    retriever.invoke.assert_not_called()
+
+
+def test_public_how_to_still_requires_reference_retrieval():
+    from telecom_support.rag import account_only_request
+    from telecom_support.account_tools import AccountTools
+    import mongomock
+    service = AccountTools(mongomock.MongoClient().test)
+    assert not account_only_request("How can I recharge my account online?", service)
+    assert not account_only_request("What is a package?", service)
+    assert not account_only_request("My account expired. What should I do?", service)
+    assert not account_only_request("My payment failed, how can I fix it?", service)
+    assert account_only_request("Get my payment history", service)
+    assert account_only_request("Register a support ticket about an error", service)
+
+
 @pytest.mark.parametrize("query", [
     "Okay. What's your name, you said?",
     "I asked for your name. What is your name? What should I interest you?",

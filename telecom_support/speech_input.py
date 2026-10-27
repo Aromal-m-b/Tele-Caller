@@ -30,7 +30,7 @@ class SpeechSettings:
     model: str = "nova-3"
     language: str = "en-US"
     device: int | None = None
-    endpointing_ms: int = 1500
+    endpointing_ms: int = 1100
     tts_model: str = "aura-2-andromeda-en"
     output_device: int | None = None
     audio_output: bool = False
@@ -50,7 +50,7 @@ class SpeechSettings:
             timeout = float(idle_timeout if idle_timeout is not None else os.getenv("CALL_IDLE_TIMEOUT_SECONDS", "45"))
             grace = float(idle_grace if idle_grace is not None else os.getenv("CALL_IDLE_GRACE_SECONDS", "20"))
             checkin = float(idle_checkin if idle_checkin is not None else os.getenv("CALL_IDLE_CHECKIN_SECONDS", "15"))
-            endpoint = int(endpointing_ms if endpointing_ms is not None else os.getenv("DEEPGRAM_ENDPOINTING_MS", "1500"))
+            endpoint = int(endpointing_ms if endpointing_ms is not None else os.getenv("DEEPGRAM_ENDPOINTING_MS", "1100"))
             if not 500 <= endpoint <= 10000:
                 raise ValueError()
             if not all(math.isfinite(v) for v in (timeout, grace, checkin)) or timeout < 0 or grace <= 0 or checkin < 0:
@@ -69,7 +69,7 @@ class SpeechSettings:
         params = dict(model=self.model, language=self.language, smart_format="true",
                       encoding="linear16", sample_rate=16000, channels=1,
                       endpointing=self.endpointing_ms, interim_results="true",
-                      utterance_end_ms=max(2000, self.endpointing_ms + 500), vad_events="true", punctuate="true")
+                      utterance_end_ms=max(1500, self.endpointing_ms + 500), vad_events="true", punctuate="true")
         return "wss://api.deepgram.com/v1/listen?" + urlencode(params)
 
 
@@ -292,6 +292,7 @@ async def process_turns(application, turns, *, write=print, clock=time.monotonic
                     continue
             # Deepgram punctuates utterances; the existing confirmation check accepts
             # punctuation. Other customer text is passed through without rewriting.
+            generation_started = clock()
             generation = asyncio.create_task(asyncio.to_thread(application.generate, turn.text))
             try:
                 answer = await asyncio.shield(generation)
@@ -304,9 +305,13 @@ async def process_turns(application, turns, *, write=print, clock=time.monotonic
             except Exception:
                 await emit("I couldn't complete that request. Please try again.")
                 continue
+            if getattr(application, "audit", None):
+                application.audit.event(f"Backend reply ready: {1000 * (clock() - generation_started):.0f} ms after final transcript processing began.")
             await emit(answer, getattr(application, "last_spoken_response", None))
             if getattr(application, "call_action", None) == "confirm_end":
-                await call_event("confirm_end", "Would you like me to end the call?")
+                from .call_control import end_confirmation_question
+                if not end_confirmation_question(answer):
+                    await call_event("confirm_end", "Would you like me to end the call?")
                 control.asked()
             control.touch()
             last_answer_at = float("inf") if speaker is not None and getattr(speaker, "interrupted", False) else clock()

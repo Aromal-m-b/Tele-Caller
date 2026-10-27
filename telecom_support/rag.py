@@ -70,6 +70,9 @@ corrects 'blank screen' to 'asking to recharge', address the recharge request fi
 Respond empathetically and give short, practical steps relevant to the requested task.
 Write for a spoken conversation: use short sentences and everyday language. Start
 with the useful answer. Avoid formal preambles, repeated apologies and long lists.
+Normally answer in 40 to 70 words, giving the next useful step rather than every
+possible option at once. Provide more detail when the caller asks or when accuracy
+requires it. Preserve prices, validity caveats and relevant confirmation details.
 Distinguish recharging from refreshing an already recharged account. Do not skip
 recharge instructions to give signal/hardware troubleshooting instead. Ask which
 recharge method the customer prefers when appropriate. Never ask for payment PINs,
@@ -105,6 +108,24 @@ def format_docs(documents):
     return "\n\n".join(
         f"[Source: {d.metadata.get('source', 'unknown')}; page: {d.metadata.get('page', 'n/a')}]\n{d.page_content}"
         for d in documents)
+
+
+def account_only_request(query, service):
+    """Known account actions need the database, not another paid embedding call."""
+    from .account_tools import explicit_confirmation, confirmation_text
+    if ((service.pending_recharge or getattr(getattr(service, "ticket_service", None), "pending", None))
+            and (explicit_confirmation(query) or confirmation_text(query) in {"no", "cancel", "no thanks", "not now"})):
+        return True
+    value = query.casefold()
+    if re.search(r"\b(?:log|register|raise|create|report|submit)\b.{0,45}\b(?:ticket|issue|complaint)\b", value):
+        return True
+    if re.search(r"\b(?:verify|authenticate)\b.{0,30}\b(?:account|identity|customer)\b", value):
+        return True
+    if (re.search(r"\b(?:how|instructions|steps|why|help|fix|resolve|troubleshoot|what is a|what is an)\b", value)
+            and not value.startswith("how long")):
+        return False
+    return bool(re.search(r"\b(?:my|our)\b.{0,30}\b(?:profile|balance|validity|expiry|payment|subscription|account status|current (?:plan|package))\b|"
+                          r"\b(?:previous|last|latest)\b.{0,25}\b(?:recharge|payment)\b", value))
 
 
 def format_support_answer(answer):
@@ -341,7 +362,8 @@ class SupportRAG:
         memory_context = self.memory.context(search_query)
         if memory_context:
             search_query += "\nEarlier session context:\n" + memory_context
-        documents = self.retriever.invoke(self.safe_model_text(search_query))
+        skip_retrieval = self.account_agent and account_only_request(query, self.account_agent.service)
+        documents = [] if skip_retrieval else self.retriever.invoke(self.safe_model_text(search_query))
         if not documents and not (self.history or memory_context or self.account_agent):
             return self._remember(query, FALLBACK)
         values = {"question": self.safe_model_text(query), "context": format_docs(documents), "history": self.safe_model_history(),

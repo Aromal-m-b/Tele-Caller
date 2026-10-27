@@ -65,7 +65,7 @@ release. Never execute an old database seed script against production.
 ## Call and speech settings
 
 Use `--speech-pause 2500` to allow longer pauses while the caller speaks. The
-default is 1500 ms. Idle warning/grace defaults are 45/20 seconds, with an early audibility check at 15 seconds, separately
+default is 1100 ms. Idle warning/grace defaults are 45/20 seconds, with an early audibility check at 15 seconds, separately
 configurable with `--idle-timeout` and `--idle-grace`. Zero idle timeout disables
 automatic idle disconnect. See [speech input](speech-input.md) and
 [speech output](speech-output.md) for interruption and data-flow behavior.

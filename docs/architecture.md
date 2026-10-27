@@ -44,7 +44,7 @@ FAISS metadata uses pickle. The included demo builder never overwrites an index.
 | GEMINI_EMBEDDING_MODEL | models/gemini-embedding-001; must match the index |
 | DEEPGRAM_STT_MODEL | nova-3 |
 | DEEPGRAM_TTS_MODEL | aura-2-andromeda-en |
-| DEEPGRAM_ENDPOINTING_MS | 1500; raise for longer breathing/thinking pauses |
+| DEEPGRAM_ENDPOINTING_MS | 1100; raise for longer breathing/thinking pauses |
 | CALL_IDLE_CHECKIN_SECONDS | 15; zero disables the early audibility check |
 | CALL_IDLE_TIMEOUT_SECONDS | 45; zero disables idle disconnect |
 | CALL_IDLE_GRACE_SECONDS | 20 |

@@ -35,7 +35,7 @@ needed for the demo. Say “please end the call” to finish.
 - Reduce repeated FAQ explanations with answers grounded in approved documents.
 - Keep conversational text context instead of restarting every exchange.
 - Retrieve account and subscription facts through authenticated, read-only tools.
-- Leave callers time to breathe: **1.5-second turn pause**, configurable per business.
+- Leave callers time to breathe: **1.1-second turn pause**, configurable per business.
 - End idle calls after a **15-second audibility check, 45-second warning and 20-second grace period**.
 - Model operating costs before expanding a supervised pilot.
 

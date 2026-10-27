@@ -82,6 +82,29 @@ def test_provider_error_does_not_leak_raw_body_and_releases_resources():
     asyncio.run(run())
 
 
+def test_repeated_reply_replays_session_audio_without_another_provider_request():
+    async def run():
+        calls = []
+        pcm = b"\x01\x02" * 2400
+        def handler(request):
+            calls.append(request)
+            return httpx.Response(200, content=pcm)
+        device = FakeSpeakerDevice()
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        output = DeepgramSpeechOutput(SpeechSettings("fake"), client=client, device_factory=lambda **_: device)
+        async with output:
+            await output.speak("A freshly generated public answer.")
+            first = b"".join(device.chunks)
+            device.chunks.clear()
+            await output.speak("A freshly generated public answer.")
+            assert b"".join(device.chunks) == first == pcm
+            assert len(calls) == 1
+            await output.speak("A different answer must be synthesized.")
+            assert len(calls) == 2
+        assert not output._cached_audio and output._cached_text is None
+    asyncio.run(run())
+
+
 def test_private_tool_values_are_not_in_external_speech_payload():
     for name in ["get_customer_profile", "get_active_plan", "get_active_channels", "get_payment_history",
                  "check_payment_status", "get_previous_recharge", "confirm_recharge_choice"]:

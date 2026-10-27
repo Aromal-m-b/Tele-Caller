@@ -123,6 +123,10 @@ class DeepgramSpeechOutput:
         self.interrupted = False
         self.current_text = ""
         self.audit = None
+        self.first_audio_at = None
+        self.synthesis_started_at = None
+        self._cached_text, self._cached_audio = None, b""
+        self._collect_audio = None
 
     def observe_microphone(self, data):
         if not self.speaking:
@@ -171,7 +175,8 @@ class DeepgramSpeechOutput:
             await self.device.__aenter__()
             if self.client is None:
                 self.client = httpx.AsyncClient(headers={"Authorization": "Token " + self.settings.api_key},
-                    timeout=httpx.Timeout(30, connect=10))
+                    timeout=httpx.Timeout(30, connect=10),
+                    limits=httpx.Limits(max_connections=4, max_keepalive_connections=4, keepalive_expiry=120))
         except Exception:
             try:
                 await self.device.__aexit__(None, None, None)
@@ -182,6 +187,8 @@ class DeepgramSpeechOutput:
         return self
 
     async def speak(self, text):
+        self.first_audio_at = None
+        self.synthesis_started_at = self.clock()
         self.interrupted = False
         self.current_text = text
         self.detector.reset()
@@ -198,6 +205,15 @@ class DeepgramSpeechOutput:
             self._playback_task = None
 
     async def _write(self, data):
+        if self.first_audio_at is None:
+            self.first_audio_at = self.clock()
+            if self.audit:
+                self.audit.event(f"TTS first PCM ready: {1000 * (self.first_audio_at - self.synthesis_started_at):.0f} ms after speech request began.")
+        if self._collect_audio is not None:
+            if len(self._collect_audio) + len(data) <= 2 * 1024 * 1024:
+                self._collect_audio.extend(data)
+            else:
+                self._collect_audio = None
         self.detector.playback(data)
         await self.device.write(data)
 
@@ -207,7 +223,15 @@ class DeepgramSpeechOutput:
             return
         self.speaking = True
         self.epoch += 1
+        replay = text == self._cached_text and bool(self._cached_audio)
+        self._collect_audio = None if replay else bytearray()
         try:
+            if replay:
+                if self.audit: self.audit.event("Replayed the previous completed reply from session RAM; no new TTS request.")
+                for offset in range(0, len(self._cached_audio), 960):
+                    await self._write(self._cached_audio[offset:offset + 960])
+                await self.device.drain()
+                return
             for piece in text_chunks(text):
                 params = {"model": self.settings.tts_model, "encoding": "linear16",
                           "sample_rate": 24000, "container": "none"}
@@ -226,15 +250,19 @@ class DeepgramSpeechOutput:
                     if pending:
                         await self._write(pending)
             await self.device.drain()
+            if self._collect_audio is not None:
+                self._cached_text, self._cached_audio = text, bytes(self._collect_audio)
         except asyncio.CancelledError:
             raise
         except Exception:
             raise SpeechOutputError("Speech playback failed. The complete answer is still available on screen.") from None
         finally:
+            self._collect_audio = None
             self.speaking = False
             self.suppress_until = 0 if self.interrupted else self.clock() + .2
 
     async def __aexit__(self, *args):
+        self._cached_text, self._cached_audio = None, b""
         try:
             if self.client is not None:
                 await self.client.aclose()

@@ -69,7 +69,7 @@ def main(argv=None):
     parser.add_argument("--idle-timeout", type=float, help="Seconds of caller inactivity before final warning (default: 45; 0 disables)")
     parser.add_argument("--idle-grace", type=float, help="Seconds to wait after the final idle warning (default: 20)")
     parser.add_argument("--idle-checkin", type=float, help="Seconds before a friendly audibility check (default: 15; 0 disables)")
-    parser.add_argument("--speech-pause", type=int, help="Silence in milliseconds before a spoken turn ends (default: 1500)")
+    parser.add_argument("--speech-pause", type=int, help="Silence in milliseconds before a spoken turn ends (default: 1100)")
     parser.add_argument("--demo-customer", help="Trusted operator selection of a SYNTHETIC customer fixture; not production authentication")
     parser.add_argument("--caller-number", help="Simulated caller; defaults to CALLER_PHONE in .env")
     parser.add_argument("--no-database", action="store_true", help="Disable MongoDB tools")

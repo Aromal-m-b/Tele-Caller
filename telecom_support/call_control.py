@@ -15,6 +15,14 @@ def direct_end_request(text):
         r"(?: (?:now|please|thank you|thanks))?", words(text)))
 
 
+def end_confirmation_question(text):
+    """Reuse a generated question only when it asks permission to end the call."""
+    return text.rstrip().endswith("?") and bool(re.search(
+        r"\b(?:would you like|do you want|shall (?:i|we)|should (?:i|we)|may i|can i|"
+        r"is it (?:okay|ok) (?:if|to)|are you (?:ready|happy) (?:for|to))\b.{0,45}"
+        r"\b(?:end|close|disconnect|finish|wrap up|hang up)\b", words(text)))
+
+
 class CallControl:
     def __init__(self, *, clock=time.monotonic):
         self.clock = clock

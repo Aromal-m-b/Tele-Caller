@@ -24,7 +24,7 @@ environment. The launchers use their own `.venv`; they do not modify Anaconda.
 
 ## Set a comfortable pace
 
-The default pause allowance is 1.5 seconds. For a caller who pauses longer to
+The default pause allowance is 1.1 seconds. For a caller who pauses longer to
 breathe or think, open a terminal in the folder and run:
 
 ```powershell

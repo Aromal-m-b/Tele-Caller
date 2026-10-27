@@ -3,7 +3,7 @@
 The supplied `caller_stream.py` reference was inspected and adapted into
 `telecom_support/speech_input.py`. The reference file was not edited.
 The implementation uses its Deepgram listen/v1 WebSocket approach, Nova-3 model,
-16 kHz mono signed 16-bit PCM and configurable 1500 ms endpointing. It uses the existing
+16 kHz mono signed 16-bit PCM and configurable 1100 ms endpointing. It uses the existing
 `DEEPGRAM` key, accepting `DEEPGRAM_API_KEY` as a fallback for compatibility.
 
 ```powershell

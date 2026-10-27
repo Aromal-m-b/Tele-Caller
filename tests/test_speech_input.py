@@ -67,8 +67,8 @@ def test_settings_support_existing_and_reference_key_names(monkeypatch):
     monkeypatch.setenv("DEEPGRAM_API_KEY", "fallback-secret")
     settings = SpeechSettings.load()
     assert settings.api_key == "primary-secret" and "primary-secret" not in repr(settings)
-    assert "sample_rate=16000" in settings.url and "endpointing=1500" in settings.url
-    assert "utterance_end_ms=2000" in settings.url
+    assert "sample_rate=16000" in settings.url and "endpointing=1100" in settings.url
+    assert "utterance_end_ms=1600" in settings.url
     monkeypatch.delenv("DEEPGRAM")
     assert SpeechSettings.load().api_key == "fallback-secret"
     monkeypatch.delenv("DEEPGRAM_API_KEY")
