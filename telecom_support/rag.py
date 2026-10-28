@@ -11,6 +11,13 @@ from langchain_community.vectorstores import FAISS
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from .memory import ConversationMemory
 from .guardrails import SupportScopeGuard
+from .latency import MeasuredEmbeddings, ModelTiming, measure
+
+
+class MeasuredFAISS(FAISS):
+    def similarity_search_with_score_by_vector(self, *args, **kwargs):
+        with measure("faiss"):
+            return super().similarity_search_with_score_by_vector(*args, **kwargs)
 
 FALLBACK = ("Thank you for reaching out! I couldn't find enough information in our "
             "support knowledge base to answer accurately. Could you provide more details?")
@@ -117,9 +124,9 @@ def distance_relevance(distance):
 
 
 def create_embeddings(settings, *, for_documents=False):
-    return GoogleGenerativeAIEmbeddings(
+    return MeasuredEmbeddings(GoogleGenerativeAIEmbeddings(
         model=settings.embedding_model, google_api_key=settings.api_key,
-        task_type="retrieval_document" if for_documents else "retrieval_query")
+        task_type="retrieval_document" if for_documents else "retrieval_query"))
 
 
 def split_documents(documents):
@@ -292,7 +299,9 @@ class SupportRAG:
             return budget.response
         dialogue = self.model_opening() + self.safe_model_history()
         intent, text = self.conversation.answer(self.safe_model_text(query), dialogue=dialogue,
-            memory=self.safe_model_text(self.memory.context(query)), fallback=fallback)
+            memory=self.safe_model_text(self.memory.context(query)), fallback=fallback,
+            on_sentence=self._sentence_sink,
+            on_partial=lambda text: setattr(self, "_stream_partial_text", text))
         if intent == "confirm_end":
             self.call_action = "confirm_end"
         if intent == "repeat":
@@ -347,7 +356,8 @@ class SupportRAG:
         if memory_context:
             search_query += "\nEarlier session context:\n" + memory_context
         skip_retrieval = self.account_agent and account_only_request(query, self.account_agent.service)
-        documents = [] if skip_retrieval else self.retriever.invoke(self.safe_model_text(search_query))
+        with measure("retrieval"):
+            documents = [] if skip_retrieval else self.retriever.invoke(self.safe_model_text(search_query))
         if not documents and not (self.history or memory_context or self.account_agent):
             return self._remember(query, FALLBACK)
         values = {"question": self.safe_model_text(query), "context": format_docs(documents), "history": self.safe_model_history(),
@@ -355,8 +365,8 @@ class SupportRAG:
                   "memory": self.safe_model_text(memory_context) or "(No older session memory yet.)",
                   "account_capabilities": self.account_context()}
         public_stream = (self._sentence_sink is not None
-            and re.search(r"\bhow (?:do|can|to)\b", query, re.I)
-            and not re.search(r"\b(?:my|our|account|ticket|previous|last|payment status|plan|package|recommend|compare|verify|validity|balance|profile)\b", query, re.I)
+            and (not self.account_agent or re.search(r"\b(?:how|screen|signal|cable|remote|installation|website)\b|\bwhat is\b|\brecharge online\b", query, re.I))
+            and not re.search(r"\b(?:account|ticket|previous|last|payment status|plan|package|recommend|compare|verify|validity|balance|profile)\b", query, re.I)
             and not (self.account_agent and (self.account_agent.service.pending_recharge
                 or getattr(getattr(self.account_agent.service, "ticket_service", None), "pending", None))))
         if self.account_agent and not public_stream:
@@ -395,7 +405,7 @@ def build_application(settings, *, source="index", url=None, index_dir=None, acc
         if not documents:
             raise ValueError("No nonempty document chunks to index.")
         # Document and query embeddings require their respective retrieval task types.
-        store = FAISS.from_documents(documents, create_embeddings(settings, for_documents=True),
+        store = MeasuredFAISS.from_documents(documents, create_embeddings(settings, for_documents=True),
                                      relevance_score_fn=distance_relevance)
         store.embedding_function = embeddings
     elif source == "index":
@@ -409,15 +419,15 @@ def build_application(settings, *, source="index", url=None, index_dir=None, acc
             if recorded != settings.embedding_model:
                 raise ValueError(f"Index uses {recorded}; configured embedding model is {settings.embedding_model}.")
         # Only open trusted indexes generated locally; the metadata uses pickle.
-        store = FAISS.load_local(str(path), embeddings, allow_dangerous_deserialization=True,
+        store = MeasuredFAISS.load_local(str(path), embeddings, allow_dangerous_deserialization=True,
                                  relevance_score_fn=distance_relevance)
     else:
         raise ValueError(f"Unknown knowledge source: {source}")
     retriever = store.as_retriever(search_type="similarity_score_threshold",
                                   search_kwargs={"k": 5, "score_threshold": 0.5})
-    model_options = {"max_output_tokens": 1024}
+    model_options = {"max_output_tokens": 1024, "callbacks": [ModelTiming()]}
     if audit is not None:
-        model_options["callbacks"] = [audit]
+        model_options["callbacks"].append(audit)
     if settings.model.startswith("gemini-2.5-flash"):
         # Its thinking tokens share the output limit. Simple grounded support
         # answers should not spend that budget reasoning and get cut off mid-sentence.

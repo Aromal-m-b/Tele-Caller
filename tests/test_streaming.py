@@ -15,6 +15,39 @@ def test_sentence_boundary_preserves_decimal_and_partial_text():
     assert sentences("Last sentence", final=True) == (["Last sentence"], "")
 
 
+def test_conversational_text_streams_before_json_response_finishes():
+    from telecom_support.conversation import ConversationResponder
+    from telecom_support.guardrails import SupportScopeGuard
+    emitted = []
+    def model(prompt):
+        yield '{"intent":"reply","text":"Yes, I can hear you. Go'
+        assert emitted == ['Yes, I can hear you.']
+        yield ' ahead."}'
+    responder = ConversationResponder(RunnableLambda(model), SupportScopeGuard())
+    intent, text = responder.answer('Can you hear me?', dialogue=[], memory='', fallback='Retry', on_sentence=emitted.append)
+    assert intent == 'reply' and text == 'Yes, I can hear you. Go ahead.'
+    assert emitted == ['Yes, I can hear you.', 'Go ahead.']
+
+
+def test_streamed_repeat_and_end_control_intentions_are_not_spoken_early():
+    from telecom_support.conversation import ConversationResponder
+    from telecom_support.guardrails import SupportScopeGuard
+    for intent, text in [('repeat', ''), ('confirm_end', 'Shall I end the call?')]:
+        import json
+        responder = ConversationResponder(RunnableLambda(lambda _, i=intent, t=text: json.dumps(dict(intent=i, text=t))), SupportScopeGuard())
+        emitted = []
+        result = responder.answer('Thanks', dialogue=[], memory='', fallback='Retry', on_sentence=emitted.append)
+        assert result == (intent, text)
+        assert emitted == []
+
+
+def test_conversation_stream_preserves_escaped_quotes_and_unicode_boundaries():
+    from telecom_support.streaming import conversation_tokens
+    parts = ['{"intent":"reply","text":"Call me \\"Maya\\". ', 'I can h', 'ear you. \\u00', 'e9"}']
+    raw = []
+    assert ''.join(conversation_tokens(iter(parts), raw)) == 'Call me "Maya". I can hear you. é'
+
+
 def test_public_rag_emits_before_model_finishes_and_remembers_once():
     emitted = []
     def tokens(prompt):

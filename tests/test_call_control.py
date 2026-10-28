@@ -45,7 +45,7 @@ def test_confirmed_call_end_does_not_reach_account_agent():
         output = []
         await process_turns(app, turns, write=output.append, clock=lambda: 10)
         assert any("end the call?" in line for line in output)
-        assert "Goodbye!" in output[-1]
+        assert "Goodbye!" in [line for line in output if line.startswith("A: ")][-1]
         app.generate.assert_not_called()
     asyncio.run(run())
 
@@ -123,7 +123,7 @@ def test_model_can_offer_disconnect_but_requires_user_confirmation():
         await process_turns(app, turns, clock=lambda: 10, write=output.append)
         assert app.conversation.generated
         assert any("end the call?" in line for line in output)
-        assert "Goodbye!" in output[-1]
+        assert "Goodbye!" in [line for line in output if line.startswith("A: ")][-1]
     asyncio.run(run())
 
 
@@ -305,7 +305,7 @@ def test_account_path_end_question_arms_controller_without_intent_flag():
         turns.put_nowait(SpokenTurn("Yes, of course.", 11))
         await asyncio.wait_for(process_turns(app, turns, clock=lambda: 10, write=output.append), 1)
         assert model.call_count == 1
-        assert output[-1] == "A: Thanks for calling. Goodbye!"
+        assert [line for line in output if line.startswith("A: ")][-1] == "A: Thanks for calling. Goodbye!"
     asyncio.run(run())
 
 

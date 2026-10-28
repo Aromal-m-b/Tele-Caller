@@ -20,8 +20,11 @@ custom sampling parameters are omitted for newer models. The public grounding
 prompt is shorter; evidence, history, privacy and tool checks remain active.
 
 Account/identity requests, package recommendations, pending confirmations and ticket
-operations retain the existing buffered tool path. Conversational intent JSON also
-stays buffered so repeat and hang-up intentions are resolved before speech. Private
+operations retain the existing buffered tool path. Ordinary conversational reply,
+decline and clarification text now streams from an intent-first JSON header, with
+escape-safe decoding and sentence screening. Repeat and hang-up intentions remain
+buffered so their control action is validated before speech. Reordered JSON fields
+fall back to buffered playback. Private
 account results retain their safe spoken substitutes. This is an initial public
 answer streaming path, not streaming coverage of every kind of response.
 
@@ -53,3 +56,7 @@ Run `python -m pytest tests/test_streaming.py -q` to verify early delivery, deci
 boundaries, scope rejection, barge-in and playback-failure cleanup without API calls.
 SIP/PSTN transport, Redis session storage and human transfers from the proposed
 architecture are not implemented by this change.
+
+Every microphone turn now prints a timing line when its first PCM frame has been
+written to the speaker device. The same line is saved in the local call log. See
+[timing definitions](latency.md#per-turn-timer) for which delays are measured.

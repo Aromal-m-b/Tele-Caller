@@ -2,11 +2,58 @@
 import asyncio
 import re
 import threading
+import json
 from concurrent.futures import TimeoutError
 
 
 class StreamCancelled(Exception):
     """A caller interrupted a public answer; never execute a follow-on action."""
+
+
+def conversation_tokens(tokens, raw_parts, cancelled=lambda: False):
+    """Decode only an intent-first JSON text value; control intentions stay buffered."""
+    previous = ""
+    try:
+        for token in tokens:
+            if cancelled():
+                raise StreamCancelled()
+            raw_parts.append(token)
+            raw = "".join(raw_parts).strip().removeprefix("```json").removeprefix("```").lstrip()
+            if len(raw) > 8000:
+                raise ValueError("Conversational response too long")
+            header = re.match(r'^\{\s*"intent"\s*:\s*"(?:reply|decline|clarify)"\s*,\s*"text"\s*:\s*"', raw)
+            if not header:
+                continue
+            encoded, escaped = "", False
+            for char in raw[header.end():]:
+                if char == '"' and not escaped:
+                    break
+                encoded += char
+                escaped = char == "\\" and not escaped
+            decoded = None
+            # A token may end halfway through an escape (including \uXXXX).
+            for trim in range(min(6, len(encoded)) + 1):
+                candidate = encoded[:-trim] if trim else encoded
+                try:
+                    decoded = json.loads('"' + candidate + '"')
+                    break
+                except json.JSONDecodeError:
+                    pass
+            if decoded is None or not decoded.startswith(previous):
+                continue
+            if len(decoded.split()) > 60:
+                raise ValueError("Conversational response too long")
+            if decoded != previous:
+                yield decoded[len(previous):]
+                previous = decoded
+        # Validate the complete envelope before releasing an unfinished last sentence.
+        raw = "".join(raw_parts).strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        data = json.loads(raw)
+        if set(data) != {"intent", "text"} or data["intent"] not in {"reply", "decline", "clarify", "repeat", "confirm_end"}:
+            raise ValueError("Invalid conversation envelope")
+    finally:
+        close = getattr(tokens, "close", None)
+        if callable(close): close()
 
 
 def sentences(buffer, final=False):
@@ -55,6 +102,8 @@ async def generate_and_speak(application, query, speaker):
     def publish(text):
         if stopped.is_set():
             raise StreamCancelled()
+        from .latency import mark
+        mark("first_sentence")
         future = asyncio.run_coroutine_threadsafe(queue.put(text), loop)
         while not stopped.is_set():
             try:

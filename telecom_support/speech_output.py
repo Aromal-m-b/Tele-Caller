@@ -196,6 +196,8 @@ class DeepgramSpeechOutput:
         return self
 
     async def speak(self, text):
+        from .latency import mark
+        mark("tts_start")
         self.first_audio_at = None
         self.synthesis_started_at = self.clock()
         self.interrupted = False
@@ -214,6 +216,8 @@ class DeepgramSpeechOutput:
             self._playback_task = None
 
     async def _write(self, data):
+        from .latency import mark, active_turn
+        mark("first_pcm")
         if self.first_audio_at is None:
             self.first_audio_at = self.clock()
             if self.audit:
@@ -225,6 +229,8 @@ class DeepgramSpeechOutput:
                 self._collect_audio = None
         self.detector.playback(data)
         await self.device.write(data)
+        timer = active_turn.get()
+        if timer is not None: timer.first_audio()
 
     async def _play(self, text):
         text = speech_text(text)

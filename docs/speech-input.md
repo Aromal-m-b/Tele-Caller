@@ -88,6 +88,13 @@ Audio files and microphone recordings are not written by normal application use.
 
 ## Verification
 
+Every turn now displays a timer from speech detection and final transcript receipt
+to the first reply PCM written to the audio device. It separates query embeddings,
+local vector search, Gemini's first token and TTS first PCM. The same summary is
+stored in the call transcript log; see [timing definitions](latency.md#per-turn-timer).
+Speech-detection time includes the user's speaking duration. Where available,
+word timestamps also provide an estimated speech-end-to-audio measure.
+
 Tests cover final/interim segmentation, complete utterance delivery, ordered backend
 processing, nonblocking audio, punctuation, early confirmations, stop/cancel cleanup,
 device overflow, key aliases, and audio-default versus explicit text CLI behavior.
