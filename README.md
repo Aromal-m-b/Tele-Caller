@@ -2,7 +2,7 @@
 
 **A conversational voice-support pilot for founders and small support teams.**
 
-Tele-Caller listens through Deepgram, reasons with Gemini 3 Flash, retrieves approved
+Tele-Caller listens through Deepgram, reasons with Gemini 3.8 Flash, retrieves approved
 knowledge with FAISS, and answers in a natural female voice. It keeps text context,
 handles interruptions, repeats previous answers, and closes a call on request,
 after confirmation, or after an inactivity warning.
@@ -48,7 +48,7 @@ capacity-value scenarios and break-even math.
 ## Technical path
 
 ```text
-Microphone → Deepgram Nova-3 → text dialogue + Gemini 3 Flash
+Microphone → Deepgram Nova-3 → text dialogue + Gemini 3.8 Flash
                               ├─ conversational intent and reply
                               ├─ FAISS retrieval over approved knowledge
                               └─ authenticated read-only MongoDB tools

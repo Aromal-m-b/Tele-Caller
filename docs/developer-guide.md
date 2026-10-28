@@ -15,8 +15,12 @@ or scanned documents. Native PDF extraction is part of the core install.
 ## Configuration
 
 Copy `.env.example` to `.env` and enter your own `GEMINI_API_KEY` and `DEEPGRAM`.
-The text model defaults to `gemini-3-flash-preview`. Gemini embeddings retain
+The text model defaults to `gemini-3.8-flash`. Gemini embeddings retain
 `models/gemini-embedding-001`. `MONGODB_URI` is optional; leave it blank for the demo.
+Gemini 3.8 uses low thinking. Call cost estimates default to its standard published
+rates, with the introductory period ending December 31, 2026; explicit `COST_*`
+overrides take precedence and must be reviewed. The older business-case examples
+remain illustrative planning scenarios, not quotations for the new model.
 Do not commit keys or credentials. The example database schema is in
 [metadata_csv.md](../metadata_csv.md); no database contents or connection credentials
 are distributed in this repository.

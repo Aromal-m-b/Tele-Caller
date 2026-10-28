@@ -127,6 +127,7 @@ class DeepgramSpeechOutput:
         self.synthesis_started_at = None
         self._cached_text, self._cached_audio = None, b""
         self._collect_audio = None
+        self.socket_transport = None
 
     def observe_microphone(self, data):
         if not self.speaking:
@@ -177,6 +178,14 @@ class DeepgramSpeechOutput:
                 self.client = httpx.AsyncClient(headers={"Authorization": "Token " + self.settings.api_key},
                     timeout=httpx.Timeout(30, connect=10),
                     limits=httpx.Limits(max_connections=4, max_keepalive_connections=4, keepalive_expiry=120))
+            if getattr(self.settings, "tts_transport", "http") == "websocket":
+                from .tts_transport import AuraSocket
+                self.socket_transport = AuraSocket(self.settings)
+                try:
+                    await self.socket_transport.open()
+                except Exception:
+                    await self.socket_transport.close()
+                    self.socket_transport = None
         except Exception:
             try:
                 await self.device.__aexit__(None, None, None)
@@ -233,22 +242,20 @@ class DeepgramSpeechOutput:
                 await self.device.drain()
                 return
             for piece in text_chunks(text):
-                params = {"model": self.settings.tts_model, "encoding": "linear16",
-                          "sample_rate": 24000, "container": "none"}
-                async with self.client.stream("POST", "https://api.deepgram.com/v1/speak",
-                        params=params, json={"text": piece}) as response:
-                    response.raise_for_status()
-                    if self.audit: self.audit.synthesized(len(piece))
-                    pending = b""
-                    async for chunk in response.aiter_bytes():
+                pending = b""
+                audio = self._audio(piece)
+                try:
+                    async for chunk in audio:
                         pending += chunk
                         while len(pending) >= 960:
                             await self._write(pending[:960])
                             pending = pending[960:]
-                    if len(pending) % 2:
-                        raise SpeechOutputError("Speech synthesis returned an incomplete audio sample.")
-                    if pending:
-                        await self._write(pending)
+                finally:
+                    await audio.aclose()
+                if len(pending) % 2:
+                    raise SpeechOutputError("Speech synthesis returned an incomplete audio sample.")
+                if pending:
+                    await self._write(pending)
             await self.device.drain()
             if self._collect_audio is not None:
                 self._cached_text, self._cached_audio = text, bytes(self._collect_audio)
@@ -261,9 +268,35 @@ class DeepgramSpeechOutput:
             self.speaking = False
             self.suppress_until = 0 if self.interrupted else self.clock() + .2
 
+    async def _audio(self, piece):
+        if self.socket_transport is not None:
+            received = False
+            stream = self.socket_transport.audio(piece, self.audit.synthesized if self.audit else None)
+            try:
+                async for chunk in stream:
+                    received = True
+                    yield chunk
+                return
+            except Exception:
+                await self.socket_transport.close()
+                self.socket_transport = None
+                if received:
+                    raise  # Never replay words already delivered to the caller.
+                if self.audit: self.audit.event("TTS socket unavailable; using HTTP for this session.")
+            finally:
+                await stream.aclose()
+        params = {"model": self.settings.tts_model, "encoding": "linear16", "sample_rate": 24000, "container": "none"}
+        async with self.client.stream("POST", "https://api.deepgram.com/v1/speak", params=params, json={"text": piece}) as response:
+            response.raise_for_status()
+            if self.audit: self.audit.synthesized(len(piece))
+            async for chunk in response.aiter_bytes():
+                yield chunk
+
     async def __aexit__(self, *args):
         self._cached_text, self._cached_audio = None, b""
         try:
+            if self.socket_transport is not None:
+                await self.socket_transport.close()
             if self.client is not None:
                 await self.client.aclose()
         finally:

@@ -32,6 +32,13 @@ connections, excluding caller endpointing. Connection probes also encountered
 timeouts, so no fixed speedup or sub-second fresh-response guarantee is claimed.
 Compare timings from actual calls after restarting the application.
 
+The newer implementation opens a reusable Aura WebSocket before the greeting,
+with HTTP fallback, and defaults to Gemini 3.8 Flash with low thinking. Its public
+support prompt is shorter. A warm TTS-only probe reached first PCM in 0.31 seconds,
+but full public RAG/model/TTS probes still took about 4.1-4.6 seconds before first
+PCM, excluding STT endpointing. The overall waiting-time issue remains measurable;
+the transport improvement alone does not solve model/retrieval startup time.
+
 The output safety screen, personal-data restrictions, local confirmation checks
 and read-only account behavior remain enforced. Public procedural questions now
 support screened sentence streaming; account/tool and conversational intent replies

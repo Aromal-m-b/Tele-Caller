@@ -5,11 +5,45 @@ import threading
 from concurrent.futures import TimeoutError
 
 
+class StreamCancelled(Exception):
+    """A caller interrupted a public answer; never execute a follow-on action."""
+
+
 def sentences(buffer, final=False):
     """Hold unfinished sentences (including decimal prices) until more tokens arrive."""
     parts = re.split(r'(?<=[.!?])\s+(?=[A-Z"\u201c])', buffer)
     ready = parts if final else parts[:-1]
     return [p.strip() for p in ready if p.strip()], "" if final else parts[-1]
+
+
+def stream_sentences(tokens, sink, screen, format_text, partial):
+    """Close the provider iterator on scope rejection or caller interruption."""
+    answer, pending = "", ""
+    def emit(text):
+        clean = format_text(text)
+        screened = screen(clean)
+        if screened != clean:
+            raise ValueError("Unsafe streamed answer")
+        sink(screened)
+    try:
+        for token in tokens:
+            if getattr(sink, "cancelled", lambda: False)():
+                raise StreamCancelled()
+            answer += token
+            partial(answer)
+            pending += token
+            if screen(answer) != answer:
+                raise ValueError("Unsafe streamed answer")
+            ready, pending = sentences(pending)
+            for sentence in ready:
+                emit(sentence)
+        ready, _ = sentences(pending, final=True)
+        for sentence in ready:
+            emit(sentence)
+        return answer
+    finally:
+        close = getattr(tokens, "close", None)
+        if callable(close): close()
 
 
 async def generate_and_speak(application, query, speaker):
@@ -20,7 +54,7 @@ async def generate_and_speak(application, query, speaker):
 
     def publish(text):
         if stopped.is_set():
-            return
+            raise StreamCancelled()
         future = asyncio.run_coroutine_threadsafe(queue.put(text), loop)
         while not stopped.is_set():
             try:
@@ -29,6 +63,9 @@ async def generate_and_speak(application, query, speaker):
             except TimeoutError:
                 continue
         future.cancel()
+        raise StreamCancelled()
+
+    publish.cancelled = stopped.is_set
 
     async def consume():
         nonlocal emitted
@@ -53,7 +90,10 @@ async def generate_and_speak(application, query, speaker):
     consumer = asyncio.create_task(consume())
     worker = asyncio.create_task(asyncio.to_thread(application.generate_stream, query, publish))
     try:
-        answer = await asyncio.shield(worker)
+        try:
+            answer = await asyncio.shield(worker)
+        except StreamCancelled:
+            answer = ""
         finish = asyncio.create_task(queue.put(None))
         try:
             await asyncio.wait({finish, consumer}, return_when=asyncio.FIRST_COMPLETED)

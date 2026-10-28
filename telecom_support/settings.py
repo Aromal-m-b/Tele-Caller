@@ -12,7 +12,7 @@ DEFAULT_URL = "https://docs.langchain.com/oss/python/langchain/overview"
 @dataclass(frozen=True)
 class Settings:
     api_key: str = field(repr=False)
-    model: str = "gemini-3-flash-preview"
+    model: str = "gemini-3.8-flash"
     embedding_model: str = "models/gemini-embedding-001"
     assets_dir: Path = ROOT / "assets"
     index_dir: Path = ROOT / "faiss_index"

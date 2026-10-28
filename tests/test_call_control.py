@@ -268,3 +268,64 @@ def test_generic_question_cannot_substitute_for_end_permission():
     assert not end_confirmation_question("What should we do next?")
     assert end_confirmation_question("Would you like me to end the call?")
     assert end_confirmation_question("Shall we wrap up here?")
+
+
+@pytest.mark.parametrize("text", [
+    "K. Then I'll contact you once again after I have it. Okay? Because end this call now. Thank you for your support.",
+    "I don't have the card with me, so please disconnect the call now. Thanks.",
+    "Okay, thanks for helping me. You can end the call now.",
+])
+def test_explicit_end_clause_inside_natural_speech(text):
+    assert CallControl().decide(text, started_at=0) == "end"
+
+
+@pytest.mark.parametrize("text", [
+    "Please don't end the call now, I'm finding the card.",
+    "What happens if I say end the call?", "Can you explain how to end the call?",
+    "She said end the call, but I need more help.", "I'm not ready to end the call.",
+])
+def test_embedded_end_clause_does_not_override_negation_or_reported_speech(text):
+    assert CallControl().decide(text, started_at=0) != "end"
+
+
+@pytest.mark.parametrize("text", ["Yes, of course.", "Yeah, go ahead.", "Yes, absolutely, thank you."])
+def test_natural_yes_is_hangup_consent_only_after_question(text):
+    control = CallControl(clock=lambda: 10)
+    assert control.decide(text, started_at=11) != "end"
+    control.asked()
+    assert control.decide(text, started_at=11) == "end"
+
+
+def test_account_path_end_question_arms_controller_without_intent_flag():
+    async def run():
+        model = Mock(return_value="Since you need your card, would you like to end the call now?")
+        app = SimpleNamespace(generate=model, generate_call_message=lambda _: "Thanks for calling. Goodbye!")
+        turns, output = asyncio.Queue(), []
+        turns.put_nowait(SpokenTurn("I'll contact you again when I have the card.", 11))
+        turns.put_nowait(SpokenTurn("Yes, of course.", 11))
+        await asyncio.wait_for(process_turns(app, turns, clock=lambda: 10, write=output.append), 1)
+        assert model.call_count == 1
+        assert output[-1] == "A: Thanks for calling. Goodbye!"
+    asyncio.run(run())
+
+
+def test_long_direct_end_closes_simulated_microphone_socket_and_speaker():
+    from unittest.mock import AsyncMock
+    from tests.test_speech_input import FakeSocket, FakeMicrophone, result
+    from telecom_support.speech_input import SpeechSettings, run_microphone
+    async def run():
+        class Speaker:
+            epoch, mute_microphone, closed = 0, False, False
+            speak = AsyncMock()
+            async def __aenter__(self): return self
+            async def __aexit__(self, *args): self.closed = True
+        speaker, microphone = Speaker(), FakeMicrophone()
+        socket = FakeSocket([result("I'll call again. End this call now. Thank you for your support.", final=True, endpoint=True)])
+        app = SimpleNamespace(generate=Mock(side_effect=AssertionError("No ordinary answer")),
+                              generate_call_message=lambda _: "Take care. Goodbye!")
+        await asyncio.wait_for(run_microphone(app, SpeechSettings("fake", audio_output=True),
+            microphone_factory=lambda **_: microphone, connect_factory=lambda *a, **k: socket,
+            speaker_factory=lambda _: speaker, write=lambda _: None), 2)
+        assert socket.closed and microphone.closed and speaker.closed
+        speaker.speak.assert_awaited_once_with("Take care. Goodbye!")
+    asyncio.run(run())

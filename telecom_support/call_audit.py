@@ -17,9 +17,13 @@ class CallAudit(BaseCallbackHandler):
         self.call_id = uuid.uuid4().hex
         self.clock, self.started = clock, clock()
         self.model, self.identity = model, "unverified"
+        newer_flash = model.startswith("gemini-3.8-flash")
+        regular_2027 = datetime.now(timezone.utc).date().isoformat() >= "2027-01-01"
+        input_default = ("1.5" if regular_2027 else ".75") if newer_flash else ".5"
+        output_default = ("7.5" if regular_2027 else "3.75") if newer_flash else "3"
         self.rates = {key: float(os.getenv(env, default)) for key, env, default in [
-            ("input_per_million", "COST_GEMINI_INPUT_PER_MILLION", ".5"),
-            ("output_per_million", "COST_GEMINI_OUTPUT_PER_MILLION", "3"),
+            ("input_per_million", "COST_GEMINI_INPUT_PER_MILLION", input_default),
+            ("output_per_million", "COST_GEMINI_OUTPUT_PER_MILLION", output_default),
             ("stt_per_minute", "COST_STT_PER_MINUTE", ".0077"),
             ("tts_per_1000_characters", "COST_TTS_PER_1000_CHARACTERS", ".03")]}
         if any(not math.isfinite(v) or v < 0 for v in self.rates.values()):
@@ -103,7 +107,7 @@ class CallAudit(BaseCallbackHandler):
                 tts_estimate_usd=self.tts_characters / 1000 * self.rates["tts_per_1000_characters"],
                 configured_rates_usd=self.rates, cost_is_estimate=True, complete_provider_invoice=False)
             summary["estimated_total_usd"] = sum(summary[k] for k in ("gemini_estimate_usd", "stt_conservative_estimate_usd", "tts_estimate_usd"))
-            summary["cost_basis"] = ("Uses the configured rates shown above; defaults are the Gemini 3 Flash, Nova-3 and Aura-2 planning snapshot. "
+            summary["cost_basis"] = ("Uses the configured rates shown above; model-aware defaults are a published pricing snapshot for standard text generation, Nova-3 and Aura-2. "
                 "Estimate, not provider invoice. Embedding/OCR tokens and costs are unavailable and excluded. "
                 "Cancelled accepted TTS requests may still be billed. Missing model usage makes totals incomplete.")
             self.event("\nUSAGE AND COST\n" + json.dumps(summary, indent=2))

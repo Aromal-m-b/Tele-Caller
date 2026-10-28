@@ -8,11 +8,27 @@ def words(text):
 
 
 def direct_end_request(text):
-    return bool(re.fullmatch(
+    value = words(text)
+    command = (
         r"(?:(?:yes|okay|ok) )?(?:(?:please|can you|could you|would you) )?"
         r"(?:hang ?up(?: (?:the|this) call)?|(?:end|disconnect|close|terminate|stop) "
         r"(?:(?:the|this|our|my) )?(?:call|conversation|session)|disconnect|stop listening|quit|exit)"
-        r"(?: (?:now|please|thank you|thanks))?", words(text)))
+        r"(?: (?:now|please|thank you|thanks))?")
+    if re.fullmatch(command, value):
+        return True
+    # Real speech contains lead-ins, explanations and a closing thank-you.
+    # Accept an explicit call-ending clause, never a quoted/negated/conditional one.
+    for match in re.finditer(r"\b(?:hang ?up(?: (?:the|this) call)?|(?:end|disconnect|close|terminate|stop) "
+                             r"(?:(?:the|this|our|my) )?(?:call|conversation|session)|stop listening)\b", value):
+        before = value[:match.start()]
+        if re.search(r"\b(?:don't|dont|do not|never|not to|cannot|can't|shouldn't|wouldn't)\b(?: \w+){0,3}\s*$", before):
+            continue
+        if re.search(r"\b(?:if|unless|whether|what|why|how|when|said|says|say|means?|example|quoted?)\b", before):
+            continue
+        if re.search(r"\b(?:not ready to|not asking (?:you )?to)\s*$", before):
+            continue
+        return True
+    return False
 
 
 def end_confirmation_question(text):
@@ -39,7 +55,8 @@ class CallControl:
             return "end"
         if self.pending:
             self.pending = False
-            if re.fullmatch(r"(?:yes|yes please|yes go ahead|go ahead|sure|okay|ok|please do|confirm|confirmed)", value):
+            if re.fullmatch(r"(?:(?:yes|yeah|yep|sure|okay|ok)(?: (?:of course|please|go ahead|absolutely|sure|thank you|thanks))*|"
+                            r"of course|absolutely|go ahead|please do|confirm|confirmed)", value):
                 return "end" if started_at >= self.asked_at else "ask"
             if re.fullmatch(r"(?:no|no thanks|no thank you|not yet|not now|keep (?:it|the call) open|stay on)", value):
                 return "stay"

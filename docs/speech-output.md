@@ -13,7 +13,7 @@ prompts. If generation fails or returns invalid text, a short local fallback kee
 the call usable. Identity questions with conversational filler get direct answers;
 later greetings do not repeat the full introduction.
 
-Conversational replies now come from Gemini 3 Flash (`gemini-3-flash-preview`),
+Conversational replies now come from Gemini 3.8 Flash (`gemini-3.8-flash`, low thinking),
 using the opening, recent text dialogue and compressed older text context. This
 replaces the local name/greeting/courtesy answer tables. The user explicitly
 authorized sending conversational text and recent dialogue to Gemini. Hard abuse
@@ -25,7 +25,8 @@ response or the opening, rather than inventing a paraphrase. Gemini can also inf
 repeat intent from less explicit wording. Private results remain local; their
 existing safe speech prompts are retained when repeated. No private result values
 are added to Gemini's text history. Six recent exchanges plus the compressed older
-session archive retain text context; no transcript is persisted to disk by default.
+session archive retain text context. Private call transcripts and usage estimates
+are saved locally under `output/calls`; the older-session archive stays in RAM.
 
 ```powershell
 .\.venv-voice\Scripts\python.exe main.py
@@ -47,7 +48,9 @@ Facts, caveats and confirmation wording are retained. Native Aura-2 voice prosod
 is used; no arbitrary filler phrases or artificial robotic pitch manipulation is
 added. Long responses are split at sentence/word boundaries to respect request limits.
 
-Raw 24 kHz mono 16-bit PCM is streamed over HTTP and played incrementally. The
+Raw 24 kHz mono 16-bit PCM normally streams over a reusable Aura socket, with HTTP
+fallback. `DEEPGRAM_TTS_TRANSPORT=http` forces HTTP. See [streaming details](streaming.md).
+The
 speaker drains before another turn is considered complete. Failed speech leaves
 the complete text response available and reports that playback is unavailable.
 

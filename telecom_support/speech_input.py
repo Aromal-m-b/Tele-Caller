@@ -37,6 +37,7 @@ class SpeechSettings:
     idle_timeout_seconds: float = 45
     idle_grace_seconds: float = 20
     idle_checkin_seconds: float = 15
+    tts_transport: str = "http"
 
     @classmethod
     def load(cls, *, language=None, device=None, voice=None, output_device=None, audio_output=True,
@@ -57,12 +58,15 @@ class SpeechSettings:
                 raise ValueError()
         except (ValueError, TypeError):
             raise SpeechInputError("Idle timeout must be zero or positive, grace positive, and speech pause between 500 and 10000 ms.") from None
+        transport = os.getenv("DEEPGRAM_TTS_TRANSPORT", "websocket")
+        if transport not in {"http", "websocket"}:
+            raise SpeechInputError("DEEPGRAM_TTS_TRANSPORT must be http or websocket.")
         return cls(api_key=key, model=os.getenv("DEEPGRAM_STT_MODEL", "nova-3"),
                    language=language or os.getenv("DEEPGRAM_STT_LANGUAGE", "en-US"), device=device,
                    tts_model=voice or os.getenv("DEEPGRAM_TTS_MODEL", "aura-2-andromeda-en"),
                    output_device=output_device, audio_output=audio_output,
                    idle_timeout_seconds=timeout, idle_grace_seconds=grace, endpointing_ms=endpoint,
-                   idle_checkin_seconds=checkin)
+                   idle_checkin_seconds=checkin, tts_transport=transport)
 
     @property
     def url(self):
@@ -255,11 +259,11 @@ async def process_turns(application, turns, *, write=print, clock=time.monotonic
             control.touch()
             warned_at = None
             hinted_for = None
+            write("You: " + turn.text)
             action = control.decide(turn.text, started_at=turn.started_at)
             if action == "end":
                 await call_event("goodbye", "Thanks for calling Sun Direct. Goodbye!", ending=True)
                 return
-            write("You: " + turn.text)
             if presence_prompt:
                 presence_prompt = False
                 from .account_tools import explicit_confirmation
@@ -314,14 +318,15 @@ async def process_turns(application, turns, *, write=print, clock=time.monotonic
                 await emit("I couldn't complete that request. Please try again.")
                 continue
             if getattr(application, "audit", None):
-                application.audit.event(f"Backend reply ready: {1000 * (clock() - generation_started):.0f} ms after final transcript processing began.")
+                stage = "Generation and streamed playback finished" if streamed else "Backend reply ready"
+                application.audit.event(f"{stage}: {1000 * (clock() - generation_started):.0f} ms after final transcript processing began.")
             if streamed:
                 write("A: " + answer)
                 write("Listening...")
             else:
                 await emit(answer, getattr(application, "last_spoken_response", None))
-            if getattr(application, "call_action", None) == "confirm_end":
-                from .call_control import end_confirmation_question
+            from .call_control import end_confirmation_question
+            if getattr(application, "call_action", None) == "confirm_end" or end_confirmation_question(answer):
                 if not end_confirmation_question(answer):
                     await call_event("confirm_end", "Would you like me to end the call?")
                 control.asked()
@@ -438,6 +443,7 @@ async def _microphone_session(application, settings, *, microphone_factory=Micro
                         if text:
                             from .call_control import direct_end_request
                             if direct_end_request(text):
+                                write("You: " + text)
                                 stop_requested.set()
                                 return
                             if turns.full():

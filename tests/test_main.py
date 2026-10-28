@@ -313,8 +313,8 @@ def test_local_faiss_retrieval_and_answer(tmp_path, monkeypatch):
     monkeypatch.setattr(rag, "ChatGoogleGenerativeAI", model_factory)
     application = rag.build_application(Settings("fake-key"), source="index", index_dir=tmp_path)
     assert application.generate("signal") == "Check the cable."
-    assert model_factory.call_args.kwargs["thinking_level"] == "minimal"
-    assert model_factory.call_args.kwargs["temperature"] == 1.0
+    assert model_factory.call_args.kwargs["thinking_level"] == "low"
+    assert "temperature" not in model_factory.call_args.kwargs
     assert model_factory.call_args.kwargs["max_output_tokens"] >= 1024
 
 

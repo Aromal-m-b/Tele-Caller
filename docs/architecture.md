@@ -40,10 +40,11 @@ FAISS metadata uses pickle. The included demo builder never overwrites an index.
 
 | Setting | Default / use |
 | --- | --- |
-| GEMINI_MODEL | gemini-3-flash-preview, standard text API |
+| GEMINI_MODEL | gemini-3.8-flash, standard text API |
 | GEMINI_EMBEDDING_MODEL | models/gemini-embedding-001; must match the index |
 | DEEPGRAM_STT_MODEL | nova-3 |
 | DEEPGRAM_TTS_MODEL | aura-2-andromeda-en |
+| DEEPGRAM_TTS_TRANSPORT | websocket, with HTTP fallback |
 | DEEPGRAM_ENDPOINTING_MS | 1100; raise for longer breathing/thinking pauses |
 | CALL_IDLE_CHECKIN_SECONDS | 15; zero disables the early audibility check |
 | CALL_IDLE_TIMEOUT_SECONDS | 45; zero disables idle disconnect |

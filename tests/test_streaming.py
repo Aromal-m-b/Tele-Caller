@@ -112,8 +112,12 @@ def test_barge_in_discards_remaining_sentences():
         speaker.interrupted = True
     speaker.speak = speak
     def generate(query, publish):
-        for i in range(30):
-            publish(str(i))
+        from telecom_support.streaming import StreamCancelled
+        try:
+            for i in range(30):
+                publish(str(i))
+        except StreamCancelled:
+            pass
         return "Complete answer"
     asyncio.run(generate_and_speak(SimpleNamespace(generate_stream=generate), "query", speaker))
     assert spoken == ["0"]
@@ -123,8 +127,12 @@ def test_playback_failure_does_not_deadlock_producer():
     async def speak(text):
         raise RuntimeError("device failed")
     def generate(query, publish):
-        for i in range(30):
-            publish(str(i))
+        from telecom_support.streaming import StreamCancelled
+        try:
+            for i in range(30):
+                publish(str(i))
+        except StreamCancelled:
+            pass
         return "Answer"
     async def run():
         import pytest
@@ -132,3 +140,21 @@ def test_playback_failure_does_not_deadlock_producer():
             await asyncio.wait_for(generate_and_speak(SimpleNamespace(generate_stream=generate), "query",
                 SimpleNamespace(speak=speak)), 3)
     asyncio.run(run())
+
+
+def test_interrupted_generation_closes_provider_iterator_without_consuming_rest():
+    import pytest
+    from telecom_support.streaming import stream_sentences, StreamCancelled
+    closed, seen = [], []
+    def tokens():
+        try:
+            yield "First sentence. Next"
+            seen.append('unwanted continuation')
+            yield " sentence."
+        finally:
+            closed.append(True)
+    def publish(text):
+        raise StreamCancelled()
+    with pytest.raises(StreamCancelled):
+        stream_sentences(tokens(), publish, lambda value: value, lambda value: value, lambda value: None)
+    assert closed == [True] and seen == []

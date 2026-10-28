@@ -24,6 +24,93 @@ class FakeSpeakerDevice:
         self.closed = True
 
 
+def test_aura_socket_reuses_connection_and_flushes_each_sentence():
+    from telecom_support.tts_transport import AuraSocket
+    async def run():
+        class Socket:
+            def __init__(self): self.messages, self.sent, self.closed = [], [], False
+            async def send(self, text):
+                message = json.loads(text)
+                self.sent.append(message)
+                if message['type'] == 'Flush':
+                    self.messages += [b'\x00\x01' * 480, json.dumps({'type': 'Flushed'})]
+            async def recv(self): return self.messages.pop(0)
+            async def close(self): self.closed = True
+        socket, connections, accepted = Socket(), [], []
+        async def connect(url, **kwargs):
+            connections.append(url)
+            assert 'aura-2-andromeda-en' in url
+            assert kwargs['additional_headers']['Authorization'] == 'Token fake'
+            return socket
+        transport = AuraSocket(SpeechSettings('fake'), connect)
+        await transport.open()
+        for text in ['First sentence.', 'Second sentence.']:
+            assert b''.join([piece async for piece in transport.audio(text, accepted.append)])
+        assert len(connections) == 1
+        assert len(accepted) == 2
+        assert [m['type'] for m in socket.sent] == ['Speak', 'Flush', 'Speak', 'Flush']
+        await transport.close()
+        assert socket.closed
+    asyncio.run(run())
+
+
+def test_aura_interruption_clears_and_closes_socket_before_next_turn():
+    from telecom_support.tts_transport import AuraSocket
+    async def run():
+        class Socket:
+            closed = False
+            sent = []
+            async def send(self, text): self.sent.append(json.loads(text)['type'])
+            async def recv(self): return b'\x00\x01' * 480
+            async def close(self): self.closed = True
+        socket = Socket()
+        transport = AuraSocket(SpeechSettings('fake'))
+        transport.socket = socket
+        stream = transport.audio('Interrupted reply.')
+        await stream.__anext__()
+        await stream.aclose()
+        assert 'Clear' in socket.sent and socket.closed
+        assert transport.socket is None
+    asyncio.run(run())
+
+
+def test_socket_failure_before_pcm_falls_back_to_http():
+    async def run():
+        class Transport:
+            closed = False
+            async def audio(self, text, accepted=None):
+                raise ConnectionError('private-provider-error')
+                yield b''
+            async def close(self): self.closed = True
+        transport = Transport()
+        client = httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(200, content=b'\x00\x01'*480)))
+        speaker = DeepgramSpeechOutput(SpeechSettings('fake'), client=client, device_factory=FakeSpeakerDevice)
+        async with speaker:
+            speaker.socket_transport = transport
+            await speaker.speak('Public reply.')
+            assert transport.closed and speaker.device.chunks
+            assert speaker.socket_transport is None
+    asyncio.run(run())
+
+
+def test_socket_failure_after_pcm_does_not_repeat_reply_via_http():
+    async def run():
+        class Transport:
+            async def audio(self, text, accepted=None):
+                yield b'\x00\x01'*480
+                raise ConnectionError('private-provider-error')
+            async def close(self): pass
+        def unexpected(_): raise AssertionError('Must not replay audio')
+        client = httpx.AsyncClient(transport=httpx.MockTransport(unexpected))
+        speaker = DeepgramSpeechOutput(SpeechSettings('fake'), client=client, device_factory=FakeSpeakerDevice)
+        async with speaker:
+            speaker.socket_transport = Transport()
+            with pytest.raises(SpeechOutputError):
+                await speaker.speak('Public reply.')
+            assert len(speaker.device.chunks) == 1
+    asyncio.run(run())
+
+
 def test_natural_speech_format_preserves_facts_and_caveats():
     text = "## Options\n* **Family**: INR 259.50/month.\n* Expires 2026-11-11.\nVisit https://www.sundirect.in/\nPrices are illustrative, not official."
     spoken = speech_text(text)
