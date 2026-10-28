@@ -198,6 +198,7 @@ class SupportRAG:
         self.call_notices = []
         self.caller_session = None
         self.audit = None
+        self._sentence_sink = None
         self.account_agent = None
         if account_service is not None:
             from .tool_agent import ReadOnlyToolAgent
@@ -302,6 +303,14 @@ class SupportRAG:
             self.audit.event("A: " + answer)
         return answer
 
+    def generate_stream(self, query, on_sentence):
+        """Same state/privacy path; only public procedural answers stream early."""
+        self._sentence_sink = on_sentence
+        try:
+            return self.generate(query)
+        finally:
+            self._sentence_sink = None
+
     def _converse(self, query, fallback):
         budget = self.scope_guard.reserve_backend_request()
         if not budget.allowed:
@@ -370,7 +379,12 @@ class SupportRAG:
                   "opening": self.model_opening(),
                   "memory": self.safe_model_text(memory_context) or "(No older session memory yet.)",
                   "account_capabilities": self.account_context()}
-        if self.account_agent:
+        public_stream = (self._sentence_sink is not None
+            and re.search(r"\bhow (?:do|can|to)\b", query, re.I)
+            and not re.search(r"\b(?:my|our|account|ticket|previous|last|payment status|plan|package|recommend|compare|verify|validity|balance|profile)\b", query, re.I)
+            and not (self.account_agent and (self.account_agent.service.pending_recharge
+                or getattr(getattr(self.account_agent.service, "ticket_service", None), "pending", None))))
+        if self.account_agent and not public_stream:
             answer, safe_memory = self.account_agent.answer(self.prompt.format_messages(**values), query)
             if (self.caller_session and not self.caller_session.customer and
                     set(self.account_agent.last_calls) & {"get_customer_profile", "get_active_plan", "get_payment_history",
@@ -382,8 +396,34 @@ class SupportRAG:
             if safe_memory is not None:
                 self._remember(query, safe_memory)
                 return format_support_answer(answer)
-        else:
+        elif not public_stream:
             answer = self.chain.invoke(values)
+        if public_stream:
+            from .streaming import sentences
+            if self.account_agent:
+                self.account_agent.last_calls = []
+                self.account_agent.last_spoken_response = None
+            values["account_capabilities"] = "This turn explains a public support procedure. No account tools are executed. Do not claim account access or actions."
+            answer, pending = "", ""
+            for token in self.chain.stream(values):
+                answer += token
+                pending += token
+                if self.scope_guard.screen_answer(answer) != answer:
+                    raise ValueError("Unsafe streamed answer")
+                ready, pending = sentences(pending)
+                for sentence in ready:
+                    clean = format_support_answer(sentence)
+                    screened = self.scope_guard.screen_answer(clean)
+                    if screened != clean:
+                        raise ValueError("Unsafe streamed answer")
+                    self._sentence_sink(screened)
+            ready, _ = sentences(pending, final=True)
+            for sentence in ready:
+                clean = format_support_answer(sentence)
+                screened = self.scope_guard.screen_answer(clean)
+                if screened != clean:
+                    raise ValueError("Unsafe streamed answer")
+                self._sentence_sink(screened)
         answer = self.scope_guard.screen_answer(format_support_answer(answer))
         return self._remember(query, answer)
 

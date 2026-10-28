@@ -33,5 +33,7 @@ timeouts, so no fixed speedup or sub-second fresh-response guarantee is claimed.
 Compare timings from actual calls after restarting the application.
 
 The output safety screen, personal-data restrictions, local confirmation checks
-and read-only account behavior remain enforced. Speech is still played after the
-answer has been checked; unvalidated LLM token streaming is not enabled.
+and read-only account behavior remain enforced. Public procedural questions now
+support screened sentence streaming; account/tool and conversational intent replies
+remain buffered. See [streaming behavior and limits](streaming.md). For streamed
+answers, audio cache reuse applies to the last completed sentence, not the whole reply.

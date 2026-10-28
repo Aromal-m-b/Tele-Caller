@@ -293,9 +293,17 @@ async def process_turns(application, turns, *, write=print, clock=time.monotonic
             # Deepgram punctuates utterances; the existing confirmation check accepts
             # punctuation. Other customer text is passed through without rewriting.
             generation_started = clock()
-            generation = asyncio.create_task(asyncio.to_thread(application.generate, turn.text))
+            streaming = speaker is not None and callable(getattr(application, "generate_stream", None))
+            if streaming:
+                from .streaming import generate_and_speak
+                generation = asyncio.create_task(generate_and_speak(application, turn.text, speaker))
+            else:
+                generation = asyncio.create_task(asyncio.to_thread(application.generate, turn.text))
             try:
                 answer = await asyncio.shield(generation)
+                streamed = False
+                if streaming:
+                    answer, streamed = answer
             except asyncio.CancelledError:
                 # A synchronous request cannot be cancelled safely halfway through.
                 # Let it finish before the CLI closes MongoDB or discards session state.
@@ -307,7 +315,11 @@ async def process_turns(application, turns, *, write=print, clock=time.monotonic
                 continue
             if getattr(application, "audit", None):
                 application.audit.event(f"Backend reply ready: {1000 * (clock() - generation_started):.0f} ms after final transcript processing began.")
-            await emit(answer, getattr(application, "last_spoken_response", None))
+            if streamed:
+                write("A: " + answer)
+                write("Listening...")
+            else:
+                await emit(answer, getattr(application, "last_spoken_response", None))
             if getattr(application, "call_action", None) == "confirm_end":
                 from .call_control import end_confirmation_question
                 if not end_confirmation_question(answer):
