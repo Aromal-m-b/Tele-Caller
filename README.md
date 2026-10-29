@@ -29,8 +29,10 @@ needed for the demo. Say “please end the call” to finish.
 
 To try the optional managed Deepgram Voice Agent, run
 `python main.py --backend deepgram-agent` or double-click **start-agent.bat**.
-It uses the same FAISS knowledge base for public support; account/ticket features
-remain in the default backend. See [agent setup and limits](docs/deepgram-agent.md).
+It uses the same FAISS knowledge base and supports caller-scoped complaints, service
+requests, equipment orders and delivery tracking in MongoDB. General private
+account/payment tools remain in the default backend. See
+[agent setup](docs/deepgram-agent.md) and [service data model](docs/customer-services.md).
 
 [Owner quickstart](docs/quickstart.md) · [Business case and cost model](docs/business-case.md)
 · [Technical architecture](docs/architecture.md) · [Developer guide](docs/developer-guide.md)
@@ -60,8 +62,11 @@ Microphone → Deepgram Nova-3 → text dialogue + Gemini 3.8 Flash
 Assistant text → Deepgram Aura-2 Andromeda → speaker
 ```
 
-No Gemini Live API is used. Private database result values remain local and use
+No Gemini Live API is used. Account/payment database results remain local and use
 safe spoken prompts; separately approved display names are used only for greetings.
+The managed backend can speak approved synthetic service/order/delivery fields
+when its explicit sharing flag is enabled; customer IDs, phone numbers, email and
+profile-name fields stay local.
 Confirmed issue tickets are the narrow write exception to read-only account access.
 Each session keeps six recent text exchanges and a compressed,
 searchable older archive in RAM. Explicit abuse checks precede model/tool access.

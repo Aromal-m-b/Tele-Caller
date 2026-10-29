@@ -56,7 +56,7 @@ def run_menu(application, *, read=input, write=print):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Customer support knowledge base")
     parser.add_argument("--backend", choices=["pipeline", "deepgram-agent"], default="pipeline",
-        help="Voice backend: existing Gemini pipeline or managed Deepgram Voice Agent (public RAG)")
+        help="Voice backend: existing Gemini pipeline or managed Deepgram Voice Agent")
     parser.add_argument("--source", choices=["web", "index"], default="index")
     parser.add_argument("--url", default=DEFAULT_URL)
     parser.add_argument("--index-dir", help="Trusted local FAISS index directory")
@@ -77,7 +77,7 @@ def main(argv=None):
     parser.add_argument("--no-database", action="store_true", help="Disable MongoDB tools")
     args = parser.parse_args(argv)
     if args.backend == "deepgram-agent" and (args.text or args.question is not None or args.silent or args.demo_customer):
-        parser.error("deepgram-agent is a microphone/public-RAG backend; omit --text, --question, --silent and --demo-customer.")
+        parser.error("deepgram-agent uses microphone audio and the local caller number; omit --text, --question, --silent and --demo-customer.")
     if args.backend == "deepgram-agent" and args.speech_pause is not None:
         parser.error("--speech-pause applies to the pipeline backend; Deepgram Voice Agent manages its own turn detection.")
     from .rag import build_application
@@ -90,7 +90,7 @@ def main(argv=None):
                 voice=args.tts_voice, output_device=args.output_device, audio_output=not args.silent,
                 idle_timeout=args.idle_timeout, idle_grace=args.idle_grace, endpointing_ms=args.speech_pause,
                 idle_checkin=args.idle_checkin)
-        service, client = database_service(args.demo_customer, args.no_database or args.backend == "deepgram-agent")
+        service, client = database_service(args.demo_customer, args.no_database)
         settings = Settings.load()
         from .call_audit import CallAudit
         from .caller import CallerSession
@@ -105,7 +105,8 @@ def main(argv=None):
             model_label = "deepgram-agent:" + agent_config.provider + "/" + agent_config.model
         audit = CallAudit(ROOT / "output" / "calls", caller=caller_phone, model=model_label)
         audit.mode = "text" if args.text or args.question is not None else "voice"
-        caller = CallerSession(service, caller_phone, call_id=audit.call_id, audit=audit)
+        caller = CallerSession(service, caller_phone, call_id=audit.call_id, audit=audit,
+            allow_suspended=args.backend == "deepgram-agent")
         if service and args.demo_customer:
             from .account_tools import CustomerIdentity
             service.identity = CustomerIdentity(args.demo_customer, verified=True, synthetic_demo=True)
@@ -113,10 +114,21 @@ def main(argv=None):
         if service:
             service.caller_session = caller
             service.ticket_service = TicketService(service, os.getenv("SUPPORT_TICKET_TEMPLATE", ""), ROOT / "output" / "tickets", call_id=audit.call_id)
+        customer_services = None
+        if args.backend == "deepgram-agent" and service:
+            from .customer_services import CustomerServices
+            from .service_schema import ensure_service_schema
+            try:
+                ensure_service_schema(service.db)
+            except Exception:
+                raise ValueError("Could not initialize customer-service collections/indexes. Check MongoDB access and existing schema; no data was replaced.") from None
+            customer_services = CustomerServices(service, caller, call_id=audit.call_id,
+                share_details=os.getenv("AGENT_SHARE_SYNTHETIC_SERVICE_DETAILS", "false").casefold() in {"1", "yes", "true"})
         application = build_application(settings, source=args.source,
                                         url=args.url, index_dir=args.index_dir,
                                         account_service=service, database_client=client, audit=audit)
         application.caller_session, application.audit = caller, audit
+        application.customer_services = customer_services
         if args.question is None:
             print("Incoming simulated call: " + caller.phone + (" (registered synthetic customer)" if caller.customer else " (guest)"))
             print("Transcript and usage log: " + str(audit.path))
@@ -141,7 +153,8 @@ def main(argv=None):
                         audit.write(line)
                     if args.backend == "deepgram-agent":
                         from .deepgram_agent import run_voice_agent
-                        print("Managed agent: public knowledge only; private account/ticket tools are available in --backend pipeline.")
+                        print("Managed agent: " + ("caller-scoped synthetic service/order/delivery tools enabled; submissions require confirmation."
+                            if customer_services else "public knowledge only; set MONGODB_URI to enable service requests and tracking."))
                         asyncio.run(run_voice_agent(application, speech_settings, config=agent_config, write=write))
                     else:
                         asyncio.run(run_microphone(application, speech_settings, write=write))

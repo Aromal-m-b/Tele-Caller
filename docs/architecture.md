@@ -57,6 +57,12 @@ DOCX export. There is no payment or renewal capability. See
 [caller identity and logs](callers-tickets-logs.md) for the synthetic verification
 flow and per-call transcript/token/cost files.
 
+The managed Deepgram backend adds confirmed synthetic service forms, equipment
+order requests and delivery tracking in three linked collections. It uses local
+caller-number binding, transaction-time ownership checks and an explicit service
+detail sharing flag. See [service operations](customer-services.md). These writes
+do not charge payments, renew subscriptions, dispatch goods or cancel connections.
+
 ## Moving from pilot to service
 
 This release runs one local audio session. Horizontal scale requires a separate

@@ -35,9 +35,10 @@ def seed_demo_caller(database, phone):
 
 
 class CallerSession:
-    def __init__(self, service, phone, *, call_id="", audit=None):
+    def __init__(self, service, phone, *, call_id="", audit=None, allow_suspended=False):
         self.service, self.phone, self.call_id, self.audit = service, phone_number(phone), call_id, audit
         self.customer = None
+        self.allow_suspended = allow_suspended
         self.stage, self.username, self.attempts = None, None, 0
         if service is not None:
             rows = list(service.db.customers.find({"$or": [{"phone_normalized": self.phone},
@@ -47,7 +48,8 @@ class CallerSession:
                 self.bind(rows[0])
 
     def bind(self, row):
-        if row.get("data_type") != "SYNTHETIC" or row.get("account_status", "").casefold() != "active":
+        statuses = {"active", "suspended"} if self.allow_suspended else {"active"}
+        if row.get("data_type") != "SYNTHETIC" or row.get("account_status", "").casefold() not in statuses:
             return False
         self.customer = row
         self.service.identity = CustomerIdentity(row["customer_id"], verified=True, synthetic_demo=True)

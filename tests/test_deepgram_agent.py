@@ -189,7 +189,8 @@ def test_managed_agent_audit_uses_connection_cost_and_unknown_tokens(tmp_path):
     assert 'stt_conservative_estimate_usd' not in summary
 
 
-def test_cli_selects_agent_without_connecting_database(monkeypatch,tmp_path):
+@pytest.mark.parametrize('extra,disabled', [([],False),(['--no-database'],True)])
+def test_cli_agent_respects_database_selection(monkeypatch,tmp_path,extra,disabled):
     import telecom_support.cli as cli
     import telecom_support.deepgram_agent as agent
     import telecom_support.rag as rag
@@ -203,8 +204,8 @@ def test_cli_selects_agent_without_connecting_database(monkeypatch,tmp_path):
     monkeypatch.setattr(rag,'build_application',Mock(return_value=app))
     run = AsyncMock()
     monkeypatch.setattr(agent,'run_voice_agent',run)
-    cli.main(['--backend','deepgram-agent'])
-    assert db.call_args.args == (None,True)
+    cli.main(['--backend','deepgram-agent',*extra])
+    assert db.call_args.args == (None,disabled)
     run.assert_awaited_once()
     app.close.assert_called_once()
 
@@ -223,4 +224,31 @@ def test_server_side_function_is_not_executed_locally():
         session, sent = make_session()
         await session.event(dict(type='FunctionCallRequest',functions=[dict(id='fc1',name='query_rag',client_side=False,arguments='{}')]))
         assert not session.calls and not sent
+    asyncio.run(run())
+
+
+def test_operation_notice_preserves_original_caller_response_timer():
+    from telecom_support.latency import TurnTiming
+    async def run():
+        session, sent = make_session()
+        output = []
+        timer = TurnTiming(5,0,1,write=output.append)
+        session.timer = timer
+        text = 'Client operation result: request committed.'
+        await session.notice(text,response_timer=timer)
+        await session.event(dict(type='UserStartedSpeaking'))
+        await session.event(dict(type='ConversationText',role='user',content=text))
+        assert session.timer is timer
+        assert not output
+    asyncio.run(run())
+
+
+def test_service_facts_are_not_forwarded_as_model_rewritten_embedding_query():
+    async def run():
+        retrieve = Mock(return_value=[])
+        session, sent = make_session(retrieve)
+        session.business_data_seen = True
+        session.history = ['How can I recharge online?']
+        await session.search({'query':'Sun Direct recharge for PRIVATE-DELIVERY-ADDRESS'})
+        retrieve.assert_called_once_with('How can I recharge online?')
     asyncio.run(run())

@@ -79,6 +79,7 @@ _DOMAIN = re.compile(
     r"recharg\w*|reche?rg\w*|subscription|subscrib\w*|bouquet|pack(?:age)?s?|plans?|"
     r"channels?|payment|paid|billing|bill|balance|refund|validity|expir\w*|renew\w*|"
     r"tickets?|issues?|verify|verification|distributor|dealership|dealer|partnership|new customer|business enquiry|"
+    r"complaints?|orders?|deliver(?:y|ies)|tracking|courier|relocation|relocating|cancelling|cancellation|dish|remote|wire|adapter|connector|"
     r"account|profile|registered mobile|smart.?card|cdsn|cr.?id|customer.?id|"
     r"signal|cable|picture|screen|error|complaint|technician|installation|"
     r"movies|entertainment|sports|shopping|ott|sun nxt|sun direct go|login|otp|"

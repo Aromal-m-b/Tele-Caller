@@ -47,13 +47,19 @@ and screen returned assistant text before allowing its audio. Unlike the custom
 pipeline, cloud input reaches the managed agent before the local client receives
 its transcript, so the client cannot enforce a pre-LLM input guard. Incremental
 output screening also cannot retract speech already played. This mode is an
-opt-in public-support pilot, not equivalent to a guaranteed policy enforcement
+opt-in support pilot, not equivalent to a guaranteed policy enforcement
 boundary around a hosted model.
 
-**Private account lookup, username/smartcard verification and ticket creation are
-not exposed in this backend.** Use `--backend pipeline` for those features. No
-MongoDB connection is opened by the managed-agent CLI path. Its permitted function
-names are only `query_rag` and `end_call`; retrieved documents are reference data,
+With `MONGODB_URI` configured, the backend also enables caller-scoped complaint,
+service-request, equipment-order and delivery tools. It creates three missing
+collections and indexes and resolves the simulated caller locally. Submission
+requires a completed draft question and later real caller confirmation; there is
+no model-exposed commit function. `--no-database` disables these tools.
+See the [service data model and workflow](customer-services.md).
+
+General private account/payment lookup, username/smartcard verification and the
+older DOCX ticket flow remain in `--backend pipeline`. The managed agent uses only
+its declared FAISS, call-control and service tools; retrieved documents are data,
 not instructions. The example shop return/shipping/pricing strings from the
 pseudocode are not installed as Sun Direct knowledge.
 

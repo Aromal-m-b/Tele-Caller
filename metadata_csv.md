@@ -21,8 +21,16 @@ form fields. Payments and subscriptions remain unchanged.
 | `subscriptions` | 100 | `subscription_id` | Customer subscription records |
 | `subscription_channels` | 25 | Composite key | Individually activated channel add-ons |
 | `payments` | 397 | `payment_id` | Customer payment transactions |
+| `service_requests` | Created empty | `request_id` | Managed-agent complaints, bookings, connection/relocation/cancellation requests |
+| `orders` | Created empty | `order_id` | Confirmed synthetic equipment requests, linked to a delivery |
+| `deliveries` | Created empty | `delivery_id` | Caller-scoped fulfilment facts linked to an order and its line items |
 
 MongoDB automatically generates an `_id` for each imported document unless one is supplied. The application uses the explicit IDs above as its business identifiers.
+
+The three managed-agent collections were created during the October 29, 2026 setup.
+Confirmed calls can add records; the initial empty counts are not live counts.
+See [customer service data model](docs/customer-services.md) for their fields,
+relationships, transaction behaviour, confirmation flow and permitted spoken data.
 
 ## 2. Collection Metadata
 
@@ -51,6 +59,9 @@ MongoDB automatically generates an `_id` for each imported document unless one i
 **Relationships:**
 - One customer can have multiple subscription records.
 - One customer can have multiple payment records.
+- One customer can have multiple service requests, equipment orders and deliveries.
+- These application relationships are checked through the bound caller and MongoDB
+  transactions; they are not automatic MongoDB foreign-key constraints.
 
 ### 2.2 channels
 
