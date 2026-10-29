@@ -48,6 +48,16 @@ migrate old tickets or promise a DOCX export.
 
 ## Supported requests
 
+Draft tools return `state: awaiting_confirmation` and `submission_attempted: false`.
+This means preparation succeeded, not that MongoDB rejected a submission. A real
+caller confirmation after the review question finishes playing triggers the local
+transaction; ordinary confirmations can include polite fillers and repeated yes/okay.
+Corrections and conditional replies require review again. Repeating an identical
+draft preserves its confirmation readiness; changing the draft requires fresh consent.
+After submission, late draft retries in the same caller turn return the receipt.
+Transaction errors are logged separately from failures to send the result back to
+the voice provider. A notification failure does not undo or duplicate a saved request.
+
 Complaints cover missing recharge/payment credit, no TV signal, picture quality,
 technician misconduct, poor support, pricing concerns, billing disputes and other
 service issues. A complaint records the caller's report, not a verified finding.

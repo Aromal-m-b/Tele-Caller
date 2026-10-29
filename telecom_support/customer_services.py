@@ -116,8 +116,11 @@ def scalar(value):
 def affirmative(text):
     value = " ".join(re.sub(r"[^\w\s']", " ", text.casefold()).split())
     action = r"(?:submit|register|file|place|book|confirm) (?:it|(?:(?:the|this) )?(?:complaint|request|form|order|booking|appointment))"
-    return bool(re.fullmatch(r"(?:yes|yeah|yep|sure|absolutely|of course|(?:please )?go ahead|please do|please " + action + r"|confirm|confirmed)"
-        r"(?: (?:yes|now|please|go ahead|of course|and|" + action + r"|confirm|thanks|thank you))*", value))
+    agreement = r"(?:yes|yeah|yep|okay|ok|alright|sure|absolutely|certainly|of course|go ahead|please do|confirm|confirmed)"
+    courtesy = r"(?:please|thanks|thank you|dude|bro|mate|maya|sir|ma'am)"
+    # Full-string grammar: corrections, conditions and questions are not consent.
+    return bool(re.fullmatch(r"(?:" + courtesy + r" )*(?:" + agreement + r"|" + action + r")"
+        r"(?: (?:" + agreement + r"|" + courtesy + r"|now|and|" + action + r"))*", value))
 
 
 def submission_question(text):
@@ -227,7 +230,6 @@ class CustomerServices:
             if not address: raise ToolError("ADDRESS_REQUIRED", "No complete delivery address is saved. Add it once to the customer record, or provide a different delivery destination.")
             args["delivery_address"] = address
         if self.pending and self.pending["name"] == name and self.pending["args"] == args and self.pending["expires_at"] > self.clock():
-            self.armed_at = float("inf")
             return self.preview()
         customer = {"customer_id": customer_id}
         if name == "draft_complaint":
@@ -251,9 +253,10 @@ class CustomerServices:
     def preview(self):
         draft = self.pending
         fields = {key: value for key, value in draft["args"].items() if key != "contact_name" and value is not None}
-        return {"ok": True, "draft_id": draft["draft_id"], "draft": fields, "requires_confirmation": True,
+        return {"ok": True, "state": "awaiting_confirmation", "submission_attempted": False,
+            "draft_id": draft["draft_id"], "draft": fields, "requires_confirmation": True,
             "address_source": draft["address_source"],
-            "instruction": "Summarize the issue/items and ask explicitly whether to submit. If address_source is customer_record, say the address on file will be used; do not ask the caller to dictate it. No record, payment, dispatch or subscription change has occurred. Prices, appointment and delivery times are unconfirmed."}
+            "instruction": "Draft preparation succeeded; this is NOT a failed submission. Do not retry this draft tool to submit. Summarize the issue/items and ask explicitly whether to submit; the client handles the real caller confirmation. If address_source is customer_record, say the address on file will be used; do not ask the caller to dictate it. No record, payment, dispatch or subscription change has occurred. Prices, appointment and delivery times are unconfirmed."}
 
     def arm(self, draft_id, at):
         with self.lock:

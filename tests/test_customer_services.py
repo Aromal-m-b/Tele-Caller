@@ -290,17 +290,18 @@ def test_explicit_submission_question_is_required():
     assert not submission_question('Is that your address?')
 
 
-@pytest.mark.parametrize('text',['Yes, please submit the complaint.','Go ahead and place the order.','Please register this request.','Yes, please. Yes.'])
+@pytest.mark.parametrize('text',['Yes, please submit the complaint.','Go ahead and place the order.','Please register this request.','Yes, please. Yes.', 'Yes. Okay. Go ahead,', 'Of course, dude.', 'Okay, please do.'])
 def test_submission_affirmative_handles_action_phrases(text):
     assert affirmative(text)
 
 
-@pytest.mark.parametrize('text',['Yes, but change the address first.','Yes, what is the price?','Do not submit the complaint.'])
+@pytest.mark.parametrize('text',['Yes, but change the address first.','Yes, what is the price?','Do not submit the complaint.', 'Okay, if it is free.', 'Of course not.', 'Yes please wait.'])
 def test_qualified_yes_is_not_submission_consent(text):
     assert not affirmative(text)
 
 
-def test_agent_session_confirms_from_real_reply_after_question_playback(services):
+@pytest.mark.parametrize('reply', ['Yes, please. Yes.', 'Yes. Okay. Go ahead,', 'Of course, dude.'])
+def test_agent_session_confirms_from_real_reply_after_question_playback(services, reply):
     from telecom_support.deepgram_agent import AgentSession, AgentConfig, agent_settings
     from telecom_support.speech_input import SpeechSettings
     async def run():
@@ -314,16 +315,54 @@ def test_agent_session_confirms_from_real_reply_after_question_playback(services
         await session.event(dict(type='ConversationText',role='assistant',content='Shall I submit this complaint?'))
         session.audio_done()
         await asyncio.gather(*session.business_tasks)
+        # A redundant provider draft call must not erase completed review.
+        await session.function(dict(id='duplicate',name='draft_complaint',arguments=json.dumps(dict(category='no_signal',description='There is no television signal.'))))
         now[0] = 101
         await session.event(dict(type='UserStartedSpeaking'))
-        await session.event(dict(type='ConversationText',role='user',content='Yes, please. Yes.'))
+        await session.event(dict(type='ConversationText',role='user',content=reply))
         await asyncio.gather(*session.business_tasks)
         assert services.db.service_requests.count_documents({}) == 1
         notice = [item for item in sent if item['type'] == 'InjectUserMessage'][-1]
         assert 'Submitted' in notice['content'] and 'customer_id' not in notice['content']
         assert 'PRIVATE-CARD' not in str(sent) and '+910000000001' not in str(sent)
+        # A late model retry on the same consent turn returns the receipt.
+        await session.function(dict(id='late-retry',name='draft_complaint',arguments=json.dumps(dict(category='no_signal',description='There is no television signal.'))))
+        assert services.pending is None
+        assert services.db.service_requests.count_documents({}) == 1
+        assert 'Submitted' in sent[-1]['content']
         payload = agent_settings(SpeechSettings('fake'),AgentConfig(),service_tools=True)
         assert len(payload['agent']['think']['functions']) == 9
+    asyncio.run(run())
+
+
+def test_submission_diagnostics_and_notification_failure_are_separate(services):
+    from telecom_support.deepgram_agent import AgentSession, AgentConfig
+    from telecom_support.speech_input import SpeechSettings
+    async def run():
+        lines = []
+        async def broken_send(_): raise ConnectionError('private connection details')
+        session = AgentSession(SimpleNamespace(customer_services=services), SpeechSettings('fake'), AgentConfig(),
+            SimpleNamespace(send=broken_send), SimpleNamespace(), write=lines.append)
+        services.execute('draft_complaint', dict(category='no_signal', description='The television has no signal.'))
+        services.arm(services.pending['draft_id'],90)
+        original = services.transact
+        def fail(*_): raise RuntimeError('private database connection details')
+        services.transact = fail
+        await session.service_reply('Yes. Okay. Go ahead.',95,turn=0)
+        assert any('submission_unverified' in line and 'RuntimeError' in line for line in lines)
+        assert services.pending is not None
+        assert services.db.service_requests.count_documents({}) == 0
+        assert 'private' not in str(lines)
+        services.transact = original
+        await session.service_reply('Of course, dude.',95,turn=0)
+        assert services.db.service_requests.count_documents({}) == 1
+        assert services.pending is None
+        assert session.service_receipt[1]['ok']
+        assert any('notification failed' in line for line in lines)
+        # An unrelated text job cannot release a different pending confirmation.
+        session.service_reply_inflight = 1
+        await session.service_reply('Another statement',96,turn=1)
+        assert session.service_reply_inflight == 1
     asyncio.run(run())
 
 

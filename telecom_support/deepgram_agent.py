@@ -52,6 +52,8 @@ used; read the full address only if requested. Ask for an address only when the
 tool says no complete address is stored, the caller wants a different destination,
 or a relocation needs its NEW address. Never infer an address from city/state.
 Summarize the issue/items and ask explicitly whether to submit/place/register.
+A successful draft result means awaiting confirmation, never a submission failure.
+Do not retry a draft tool to submit it or say you will keep trying in the background.
 A draft is not registered.
 Only a later real caller confirmation can submit it locally; you have no confirm
 function. Never claim success until a client operation-result notice says it
@@ -190,7 +192,8 @@ class AgentSession:
         self.services = getattr(app, "customer_services", None)
         self.business_lock, self.business_tasks = asyncio.Lock(), []
         self.service_question_draft = None
-        self.service_reply_inflight = False
+        self.service_reply_inflight = 0
+        self.service_turn, self.service_receipt = 0, None
         self.business_data_seen = False
 
     async def send(self, payload):
@@ -260,23 +263,32 @@ class AgentSession:
         self.write(line)
         if self.audit: self.audit.event(line)
 
-    async def service_reply(self, text, started_at):
+    async def service_reply(self, text, started_at, *, controls_submission=False, turn=None):
         response_timer = self.timer
         try:
-            result = await self.service_work(self.services.resolve_reply, text, started_at)
+            try:
+                result = await self.service_work(self.services.resolve_reply, text, started_at)
+            except Exception as error:
+                # Log safe diagnostics, never connection strings or raw driver messages.
+                result = {"ok": False, "state": "submission_unverified",
+                    "error": error.code if isinstance(error, ToolError) else type(error).__name__,
+                    "message": error.message if isinstance(error, ToolError) else
+                        "Submission could not be verified. Ask whether to retry the same draft; never prepare a duplicate automatically."}
             if result is not None:
                 self.show_service_result(result)
-                if not self.stop.is_set():
-                    self.service_reply_inflight = False
-                    await self.notice("Client operation result (not a new caller request): " + self.services.for_agent(result),
-                        response_timer=response_timer if self.timer is response_timer else None)
-        except Exception:
-            if not self.stop.is_set():
-                self.service_reply_inflight = False
-                await self.notice("Client operation result: submission could not be verified. Do not claim success. Ask whether to retry the same draft; never prepare a duplicate automatically.",
-                    response_timer=response_timer if self.timer is response_timer else None)
+                if result.get("ok") and not self.services.pending:
+                    self.service_receipt = (turn, result)
         finally:
-            self.service_reply_inflight = False
+            if controls_submission:
+                self.service_reply_inflight -= 1
+        if result is not None and not self.stop.is_set():
+            try:
+                await self.notice("Client operation result (not a new caller request): " + self.services.for_agent(result),
+                    response_timer=response_timer if self.timer is response_timer else None)
+            except Exception as error:
+                line = "Service result notification failed: " + type(error).__name__ + "; retain the recorded operation result."
+                self.write(line)
+                if self.audit: self.audit.event(line)
 
     async def function(self, call):
         call_id, name = call["id"], call.get("name", "")
@@ -294,6 +306,8 @@ class AgentSession:
                         content = self.refusal
                     elif self.service_reply_inflight:
                         content = "Local submission is still resolving. Wait for the client operation result; do not prepare another draft."
+                    elif name.startswith("draft_") and self.service_receipt and self.service_receipt[0] == self.service_turn:
+                        content = self.services.for_agent(self.service_receipt[1])
                     else:
                         result = await self.service_work(self.services.execute, name, arguments)
                         self.show_service_result(result)
@@ -350,13 +364,15 @@ class AgentSession:
                 decision = self.guard.evaluate(content, context="\n".join(self.history[-6:]))
                 self.history = (self.history + [content])[-6:]
                 if self.services:
+                    self.service_turn += 1
                     start = self.timer.points["speech_detected"] if self.timer else self.clock()
                     pending = self.services.pending
-                    if pending and (affirmative(content) or content.strip().casefold().strip(".!?") in {"no", "no thanks", "cancel", "cancel it", "not now", "never mind"}):
-                        self.service_reply_inflight = True
+                    controls_submission = bool(pending and (affirmative(content) or content.strip().casefold().strip(".!?") in {"no", "no thanks", "cancel", "cancel it", "not now", "never mind"}))
                     if len([task for task in self.business_tasks if not task.done()]) >= 16:
                         raise SpeechInputError("Too many service requests are pending.")
-                    self.business_tasks.append(asyncio.create_task(self.service_reply(content, start)))
+                    if controls_submission: self.service_reply_inflight += 1
+                    self.business_tasks.append(asyncio.create_task(self.service_reply(content, start,
+                        controls_submission=controls_submission, turn=self.service_turn)))
                 action = self.control.decide(content, started_at=self.timer.points["speech_detected"] if self.timer else self.clock())
                 if action == "end":
                     self.ending, self.ending_at = True, self.clock()
