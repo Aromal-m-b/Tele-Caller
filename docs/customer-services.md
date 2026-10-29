@@ -54,10 +54,15 @@ caller confirmation after the review question finishes playing triggers the loca
 transaction; ordinary confirmations can include polite fillers and repeated yes/okay.
 Corrections and conditional replies require review again. Repeating an identical
 draft preserves its confirmation readiness; changing the draft requires fresh consent.
-Consent grammar supports contextual replies such as “Yes, I would like to” and
-requests such as “Just send it now.” Unrecognized replies produce an explicit
+Gemini interprets the real caller's meaning using recent caller text, the pending
+action type and whether review has finished. No consent/cancellation keyword
+parser or phrase-list fallback is used. The classifier returns a validated decision
+and echoes the current transcript exactly; it receives no saved addresses, account
+IDs, phone numbers or other database results. This adds one text-model call for a
+reply to a pending form. Failures and ambiguous replies produce an explicit
 `needs_clarification` result before model speech resumes, so they cannot silently
 fall through as submission failures or claims that the caller must file it themselves.
+Fresh speech supersedes an in-flight interpretation before any database write.
 After submission, late draft retries in the same caller turn return the receipt.
 Transaction errors are logged separately from failures to send the result back to
 the voice provider. A notification failure does not undo or duplicate a saved request.

@@ -113,19 +113,6 @@ def scalar(value):
     return None
 
 
-def affirmative(text):
-    value = " ".join(re.sub(r"[^\w\s']", " ", text.casefold()).split())
-    target = r"(?:it|that|(?:(?:the|this|my) )?(?:complaint|request|form|order|booking|appointment))"
-    action = r"(?:(?:submit|send|register|file|place|book|confirm|do) " + target + r"|proceed(?: with " + target + r")?|go ahead(?: with " + target + r")?)"
-    intention = r"(?:i (?:would like|want)(?: you)? to|i'd like(?: you)? to|you can)"
-    request = r"(?:(?:" + intention + r") )?(?:just )?" + action
-    agreement = r"(?:yes|yeah|yep|okay|ok|alright|sure|absolutely|certainly|of course|please do|confirm|confirmed|i agree|that's right|that is right)"
-    courtesy = r"(?:please|thanks|thank you|dude|bro|mate|maya|sir|ma'am)"
-    # Full-string grammar: corrections, conditions and questions are not consent.
-    return bool(re.fullmatch(r"(?:" + courtesy + r" )*(?:" + agreement + r"|" + request + r")"
-        r"(?: (?:" + agreement + r"|" + courtesy + r"|now|right now|and|" + request + r"|" + intention + r"))*", value))
-
-
 def submission_question(text):
     value = " ".join(text.casefold().split())
     return value.endswith("?") and bool(re.search(r"\b(?:shall i|should i|can i|may i|would you like|do you want|please confirm|is it (?:okay|ok) (?:if|to)|do i have your (?:permission|confirmation))\b.{0,100}"
@@ -133,11 +120,12 @@ def submission_question(text):
 
 
 class CustomerServices:
-    def __init__(self, account, caller, *, call_id="", share_details=False, transact=mongo_transaction, clock=time.monotonic):
+    def __init__(self, account, caller, *, call_id="", share_details=False, transact=mongo_transaction, clock=time.monotonic, interpret_reply=None):
         self.account, self.caller, self.db = account, caller, account.db
         self.call_id, self.share_details, self.transact, self.clock = call_id, share_details, transact, clock
         self.pending, self.armed_at = None, float("inf")
         self.lock = threading.RLock()
+        self.interpret_reply = interpret_reply
 
     def customer(self):
         row = self.account._customer()
@@ -265,18 +253,30 @@ class CustomerServices:
         with self.lock:
             if self.pending and self.pending["draft_id"] == draft_id: self.armed_at = at
 
-    def resolve_reply(self, text, started_at):
+    def resolve_reply(self, text, started_at, context="", still_current=None):
         """Called only for real final caller text, never a model function argument."""
         with self.lock:
             if not self.pending: return None
             if self.pending["expires_at"] <= self.clock():
                 self.pending = None
                 return {"ok": False, "message": "The draft expired. Please prepare it again."}
-            value = " ".join(re.sub(r"[^\w\s']", " ", text.casefold()).split())
-            if value in {"no", "no thanks", "cancel", "cancel it", "not now", "never mind"}:
+            if self.interpret_reply is None:
+                raise ToolError("INTENT_UNAVAILABLE", "Caller intent interpretation is unavailable. Keep the draft; do not submit or claim success.")
+            try:
+                decision = self.interpret_reply(text, kind=self.pending["name"],
+                    review_ready=started_at >= self.armed_at, context=context)
+            except Exception:
+                raise ToolError("INTENT_UNAVAILABLE", "Caller intent could not be interpreted. Nothing submitted. Keep the draft and ask for clarification; do not claim a database submission failed.") from None
+            if still_current is not None and not still_current():
+                self.armed_at = float("inf")
+                return {"ok": False, "state": "superseded", "submission_attempted": False,
+                    "message": "New caller speech superseded this interpretation. Review the current request before submitting."}
+            if decision not in {"confirm", "cancel", "clarify"}:
+                raise ToolError("INVALID_INTENT", "Caller intent was not verified. Keep the draft; ask for clarification.")
+            if decision == "cancel":
                 self.pending = None
                 return {"ok": True, "status": "DraftCancelled", "message": "The unsubmitted draft was cancelled. No existing order or subscription was cancelled."}
-            if affirmative(text):
+            if decision == "confirm":
                 if started_at < self.armed_at:
                     return {"ok": False, "message": "Explicit confirmation is needed after the complete draft question has played. Ask again; nothing submitted."}
                 return self.confirm()

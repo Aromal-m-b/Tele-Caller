@@ -193,6 +193,8 @@ class AgentSession:
         self.synthetic_quiet = {}
         self.synthetic_timers = {}
         self.services = getattr(app, "customer_services", None)
+        if self.services and getattr(app, "conversation", None):
+            self.services.interpret_reply = app.conversation.service_intent
         self.business_lock, self.business_tasks = asyncio.Lock(), []
         self.service_question_draft = None
         self.service_reply_inflight = 0
@@ -270,13 +272,17 @@ class AgentSession:
         response_timer = self.timer
         try:
             try:
-                result = await self.service_work(self.services.resolve_reply, text, started_at)
+                result = await self.service_work(self.services.resolve_reply, text, started_at,
+                    "\n".join(self.history[-6:]),
+                    lambda: (turn is None or turn == self.service_turn) and not self.user_speaking)
             except Exception as error:
                 # Log safe diagnostics, never connection strings or raw driver messages.
                 result = {"ok": False, "state": "submission_unverified",
                     "error": error.code if isinstance(error, ToolError) else type(error).__name__,
                     "message": error.message if isinstance(error, ToolError) else
                         "Submission could not be verified. Ask whether to retry the same draft; never prepare a duplicate automatically."}
+                if isinstance(error, ToolError) and error.code in {"INTENT_UNAVAILABLE", "INVALID_INTENT"}:
+                    result.update(state="needs_clarification", submission_attempted=False)
             if result is not None:
                 self.show_service_result(result)
                 if result.get("ok") and not self.services.pending:
@@ -284,7 +290,7 @@ class AgentSession:
         finally:
             if controls_submission:
                 self.service_reply_inflight -= 1
-        if result is not None and not self.stop.is_set():
+        if result is not None and not self.stop.is_set() and (turn is None or turn == self.service_turn):
             try:
                 await self.notice("Client operation result (not a new caller request): " + self.services.for_agent(result),
                     response_timer=response_timer if self.timer is response_timer else None)

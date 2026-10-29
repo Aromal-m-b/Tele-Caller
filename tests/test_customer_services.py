@@ -11,8 +11,77 @@ from pydantic import ValidationError
 from telecom_support.account_tools import AccountTools, CustomerIdentity, ToolError
 from telecom_support.caller import CallerSession
 from telecom_support.customer_services import CustomerServices, submission_question, tool_definitions
-from telecom_support.customer_services import affirmative
+from unittest.mock import Mock
 from telecom_support.service_schema import ensure_service_schema
+
+
+@pytest.mark.parametrize('decision', ['confirm', 'cancel', 'clarify'])
+def test_semantic_interpreter_returns_validated_model_decision(decision):
+    from langchain_core.language_models.fake_chat_models import FakeListChatModel
+    from telecom_support.conversation import ConversationResponder
+    text = 'Whatever phrasing the human uses in this turn.'
+    model = FakeListChatModel(responses=[json.dumps(dict(decision=decision,caller_text=text))])
+    interpreter = ConversationResponder(model, SimpleNamespace())
+    assert interpreter.service_intent(text,kind='draft_complaint',review_ready=True) == decision
+
+
+@pytest.mark.parametrize('response', [
+    dict(decision='confirm',caller_text='Invented permission'),
+    dict(decision='write_database',caller_text='Actual caller speech'),
+    dict(decision='confirm',caller_text='Actual caller speech',extra=True),
+])
+def test_semantic_interpreter_rejects_invalid_or_ungrounded_model_output(response):
+    from langchain_core.language_models.fake_chat_models import FakeListChatModel
+    from telecom_support.conversation import ConversationResponder
+    interpreter = ConversationResponder(FakeListChatModel(responses=[json.dumps(response)]),SimpleNamespace())
+    with pytest.raises(ValueError):
+        interpreter.service_intent('Actual caller speech',kind='draft_complaint',review_ready=True)
+
+
+def test_missing_or_failed_interpreter_never_writes(services):
+    services.execute('draft_complaint',dict(category='no_signal',description='The television has no signal.'))
+    services.arm(services.pending['draft_id'],90)
+    services.interpret_reply = None
+    with pytest.raises(ToolError,match='unavailable'):
+        services.resolve_reply('Submit this now.',95)
+    services.interpret_reply = Mock(side_effect=TimeoutError())
+    with pytest.raises(ToolError,match='could not be interpreted'): services.resolve_reply('Submit this now.',95)
+    assert services.pending is not None
+    assert services.db.service_requests.count_documents({}) == 0
+
+
+def test_new_speech_supersedes_model_interpretation_before_write(services):
+    services.execute('draft_complaint',dict(category='no_signal',description='The television has no signal.'))
+    services.arm(services.pending['draft_id'],90)
+    result = services.resolve_reply('You have permission to lodge that.',95,still_current=lambda:False)
+    assert result['state'] == 'superseded'
+    assert services.db.service_requests.count_documents({}) == 0
+    assert services.pending is not None
+
+
+def test_agent_wires_semantic_interpreter_without_exporting_database_fields(services):
+    from telecom_support.deepgram_agent import AgentSession, AgentConfig
+    from telecom_support.speech_input import SpeechSettings
+    async def run():
+        sent = []
+        async def send(text): sent.append(json.loads(text))
+        interpreter = Mock(return_value='confirm')
+        session = AgentSession(SimpleNamespace(customer_services=services,
+            conversation=SimpleNamespace(service_intent=interpreter)),SpeechSettings('fake'),AgentConfig(),
+            SimpleNamespace(send=send),SimpleNamespace(),write=lambda _:None,clock=lambda:100)
+        services.db.customers.update_one({'customer_id':'C1'},{'$set':{'service_address':'Private saved fixture address'}})
+        services.execute('draft_complaint',dict(category='no_signal',description='The television has no signal.'))
+        services.arm(services.pending['draft_id'],90)
+        await session.event(dict(type='ConversationText',role='user',content='You have permission to lodge that.'))
+        await asyncio.gather(*session.business_tasks)
+        assert services.db.service_requests.count_documents({}) == 1
+        args, kwargs = interpreter.call_args
+        assert args == ('You have permission to lodge that.',)
+        assert kwargs['review_ready'] is True
+        assert 'Private saved fixture address' not in str(interpreter.call_args)
+        assert 'PRIVATE-CARD' not in str(interpreter.call_args)
+        assert '+910000000001' not in str(interpreter.call_args)
+    asyncio.run(run())
 
 
 def mock_transaction(db, callback):
@@ -39,7 +108,7 @@ def services():
     ensure_service_schema(db)
     account = AccountTools(db)
     caller = CallerSession(account,'0000000001')
-    service = CustomerServices(account,caller,call_id='fixture-call',share_details=True,transact=mock_transaction,clock=lambda:100)
+    service = CustomerServices(account,caller,call_id='fixture-call',share_details=True,transact=mock_transaction,clock=lambda:100,interpret_reply=Mock(return_value="confirm"))
     return service
 
 
@@ -131,6 +200,7 @@ def test_strict_arguments_prevent_query_and_identity_injection(services,name,arg
 def test_revised_draft_needs_new_confirmation_and_no_cancels_only_draft(services):
     services.execute('draft_complaint',dict(category='pricing_concern',description='The package price is too high.'))
     services.arm(services.pending['draft_id'],90)
+    services.interpret_reply.side_effect = ['clarify', 'confirm', 'cancel']
     services.resolve_reply('Please change the description.',95)
     assert not services.resolve_reply('yes',96)['ok']
     services.resolve_reply('cancel',97)
@@ -290,11 +360,6 @@ def test_explicit_submission_question_is_required():
     assert not submission_question('Is that your address?')
 
 
-@pytest.mark.parametrize('text',['Yes, please submit the complaint.','Go ahead and place the order.','Please register this request.','Yes, please. Yes.', 'Yes. Okay. Go ahead,', 'Of course, dude.', 'Okay, please do.'])
-def test_submission_affirmative_handles_action_phrases(text):
-    assert affirmative(text)
-
-
 @pytest.mark.parametrize('reply', [
     'Yes. I would like to', 'Yes. Just send it now.',
     'I would like you to submit my complaint please.', 'Please go ahead with it.',
@@ -315,16 +380,12 @@ def test_contextual_confirmation_submits_reviewed_draft(services, reply):
 def test_conditional_or_corrective_confirmation_clarifies_without_submission(services, reply):
     services.execute('draft_complaint',dict(category='no_signal',description='The television has no signal.'))
     services.arm(services.pending['draft_id'],90)
+    services.interpret_reply.side_effect = ['clarify', 'confirm']
     result = services.resolve_reply(reply,95)
     assert result['state'] == 'needs_clarification'
     assert not result['submission_attempted']
     assert services.db.service_requests.count_documents({}) == 0
     assert not services.resolve_reply('Yes.',96)['ok']
-
-
-@pytest.mark.parametrize('text',['Yes, but change the address first.','Yes, what is the price?','Do not submit the complaint.', 'Okay, if it is free.', 'Of course not.', 'Yes please wait.'])
-def test_qualified_yes_is_not_submission_consent(text):
-    assert not affirmative(text)
 
 
 @pytest.mark.parametrize('reply', ['Yes, please. Yes.', 'Yes. Okay. Go ahead,', 'Of course, dude.',
@@ -404,6 +465,7 @@ def test_unclear_reply_delivers_clarification_notice_without_submission(services
             SimpleNamespace(send=send),SimpleNamespace(),write=lambda _:None,clock=lambda:100)
         services.execute('draft_complaint',dict(category='no_signal',description='The television has no signal.'))
         services.arm(services.pending['draft_id'],90)
+        services.interpret_reply.side_effect = ['clarify', 'confirm']
         await session.event(dict(type='ConversationText',role='user',content='Yes, but change the description first.'))
         assert session.service_reply_inflight
         await asyncio.gather(*session.business_tasks)
