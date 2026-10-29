@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .account_tools import ToolError
 from .service_schema import mongo_transaction
+from .addresses import customer_address, format_address
 
 PRODUCTS = {"DISH": "Satellite dish", "SET_TOP_BOX": "Set-top box", "COAXIAL_CABLE": "Coaxial cable",
     "DUPLICATE_SMARTCARD": "Duplicate smartcard", "REMOTE": "Remote control", "CONNECTOR": "Cable connector",
@@ -36,16 +37,10 @@ class ComplaintArgs(StrictArgs):
 class ServiceArgs(StrictArgs):
     service_type: Literal["service_booking", "new_connection", "relocation", "cancellation"]
     description: str = Field(min_length=5, max_length=2000)
-    location_address: str | None = Field(default=None, min_length=5, max_length=500)
+    location_address: str | None = Field(default=None, min_length=5, max_length=500,
+        description="Omit for a visit at the saved customer address. Supply a new destination for relocation or a caller-requested different address.")
     preferred_window: str | None = Field(default=None, min_length=3, max_length=150)
     contact_name: str | None = Field(default=None, min_length=2, max_length=100)
-
-    @model_validator(mode="after")
-    def address_for_visit(self):
-        if self.service_type in {"new_connection", "relocation", "service_booking"} and not self.location_address:
-            raise ValueError("A visit/installation address is required")
-        return self
-
 
 class OrderItem(StrictArgs):
     product_code: ProductCode
@@ -63,7 +58,8 @@ class OrderItem(StrictArgs):
 
 class OrderArgs(StrictArgs):
     items: list[OrderItem] = Field(min_length=1, max_length=6)
-    delivery_address: str = Field(min_length=5, max_length=500)
+    delivery_address: str | None = Field(default=None, min_length=5, max_length=500,
+        description="Omit to use the matched customer's saved delivery/home address. Supply only if the caller requests a different destination.")
     notes: str = Field(default="", max_length=1000)
     service_request_id: str | None = Field(default=None, pattern=r"^REQ-[A-F0-9]{16}$")
 
@@ -86,8 +82,8 @@ class DeliveryLookup(StrictArgs):
 DEFINITIONS = {
     "get_service_context": (StrictArgs, "Check locally whether the caller number matches a synthetic customer. Never ask for a customer ID or phone number."),
     "draft_complaint": (ComplaintArgs, "Prepare a complaint form: missing payment, no signal, technician misconduct, support, billing or pricing. Draft only; ask for explicit submission confirmation."),
-    "draft_service_request": (ServiceArgs, "Prepare a service visit, new connection, relocation or cancellation REQUEST. Collect address for a visit and preferred window if supplied. No subscription changes or confirmed appointment."),
-    "draft_equipment_order": (OrderArgs, "Prepare a dish, set-top box, cable, duplicate smartcard, remote, connector or adapter order REQUEST. Collect quantities, cable length and delivery address. Prices/stock are not known; no payment or dispatch."),
+    "draft_service_request": (ServiceArgs, "Prepare a service visit, new connection, relocation or cancellation REQUEST. Use the saved customer address by omitting location_address; do not ask registered callers to dictate it. Relocation requires a new destination. No account change or confirmed appointment."),
+    "draft_equipment_order": (OrderArgs, "Prepare an equipment order REQUEST. Collect items, quantities and cable length; omit delivery_address to use the matched customer's saved address. Ask for an address only if none is stored or the caller requests another destination. No payment or dispatch."),
     "get_service_requests": (RequestLookup, "Read this caller's service requests/complaints, optionally by request reference. Omit ID to list recent requests."),
     "get_orders": (OrderLookup, "Read this caller's equipment orders and linked delivery records. Omit ID to list recent orders."),
     "track_delivery": (DeliveryLookup, "Read this caller's recorded delivery location, ETA, holder/courier, charge, item IDs and address. Omit IDs for the latest delivery. Unknown fields stay unknown."),
@@ -156,8 +152,11 @@ class CustomerServices:
         args = DEFINITIONS[name][0].model_validate(arguments).model_dump()
         with self.lock:
             if name == "get_service_context":
+                customer = self.customer() if self.caller.customer else None
                 return {"ok": True, "recognized_synthetic_customer": bool(self.caller.customer),
-                        "new_connection_enquiries_allowed": True, "phone_lookup_is_local": True}
+                        "new_connection_enquiries_allowed": True, "phone_lookup_is_local": True,
+                        "saved_service_address_available": bool(customer_address(customer)) if customer else False,
+                        "saved_delivery_address_available": bool(customer_address(customer, delivery=True)) if customer else False}
             if name.startswith("draft_"):
                 return self.draft(name, args)
             customer = self.customer()
@@ -191,6 +190,8 @@ class CustomerServices:
 
     def draft(self, name, args):
         new_customer = None
+        customer_record = None
+        address_source = None
         if name == "draft_service_request" and args["service_type"] == "new_connection" and not self.caller.customer:
             phone = self.caller.phone
             existing = self.db.customers.find_one({"$or": [{"phone_normalized": phone}, {"phone": {"$in": [phone, phone[3:], phone[1:]]}}]})
@@ -200,7 +201,31 @@ class CustomerServices:
             new_customer = dict(customer_id=customer_id, full_name=args["contact_name"], phone=phone,
                 phone_normalized=phone, data_type="SYNTHETIC", account_status="Active", customer_lifecycle="Prospect")
         else:
-            customer_id = self.customer()["customer_id"]
+            customer_record = self.customer()
+            customer_id = customer_record["customer_id"]
+        if name == "draft_complaint":
+            args["location_address"] = customer_address(customer_record) if customer_record else None
+            if args["location_address"]: address_source = "customer_record"
+        elif name == "draft_service_request":
+            address = format_address(args["location_address"])
+            address_source = "caller_supplied" if address else None
+            if not address and args["service_type"] != "relocation" and customer_record:
+                address = customer_address(customer_record)
+                if address: address_source = "customer_record"
+            if not address and args["service_type"] in {"service_booking", "new_connection", "relocation"}:
+                message = ("Relocation requires the new destination; the current saved address will not be reused."
+                    if args["service_type"] == "relocation" else "No complete house address is saved. Add it once to the customer record, or provide the requested visit address.")
+                raise ToolError("ADDRESS_REQUIRED", message)
+            args["location_address"] = address
+            if new_customer and address: new_customer["service_address"] = address
+        elif name == "draft_equipment_order":
+            address = format_address(args["delivery_address"])
+            address_source = "caller_supplied" if address else None
+            if not address and customer_record:
+                address = customer_address(customer_record, delivery=True)
+                if address: address_source = "customer_record"
+            if not address: raise ToolError("ADDRESS_REQUIRED", "No complete delivery address is saved. Add it once to the customer record, or provide a different delivery destination.")
+            args["delivery_address"] = address
         if self.pending and self.pending["name"] == name and self.pending["args"] == args and self.pending["expires_at"] > self.clock():
             self.armed_at = float("inf")
             return self.preview()
@@ -216,6 +241,7 @@ class CustomerServices:
             self.owned("service_requests", "request_id", args["service_request_id"], customer)
         draft_id = uuid.uuid4().hex
         self.pending = dict(name=name, args=args, customer_id=customer_id, caller_phone=self.caller.phone,
+            address_source=address_source,
             new_customer=new_customer, draft_id=draft_id, expires_at=self.clock() + 600,
             request_id="REQ-" + uuid.uuid4().hex[:16].upper(), order_id="ORD-" + uuid.uuid4().hex[:16].upper(),
             delivery_id="DLV-" + uuid.uuid4().hex[:16].upper(), created_at=datetime.now(timezone.utc))
@@ -226,7 +252,8 @@ class CustomerServices:
         draft = self.pending
         fields = {key: value for key, value in draft["args"].items() if key != "contact_name" and value is not None}
         return {"ok": True, "draft_id": draft["draft_id"], "draft": fields, "requires_confirmation": True,
-            "instruction": "Read back the supplied details and explicitly ask whether to submit this draft. No record, payment, dispatch or subscription change has occurred. Prices, appointment and delivery times are unconfirmed."}
+            "address_source": draft["address_source"],
+            "instruction": "Summarize the issue/items and ask explicitly whether to submit. If address_source is customer_record, say the address on file will be used; do not ask the caller to dictate it. No record, payment, dispatch or subscription change has occurred. Prices, appointment and delivery times are unconfirmed."}
 
     def arm(self, draft_id, at):
         with self.lock:
@@ -259,6 +286,7 @@ class CustomerServices:
         if not draft["new_customer"] and self.customer()["customer_id"] != draft["customer_id"]:
             raise ToolError("CALLER_MISMATCH", "Caller changed; prepare a new draft.")
         base = dict(customer_id=draft["customer_id"], data_type="SYNTHETIC", schema_version=1,
+            address_source=draft["address_source"],
             idempotency_key=draft["draft_id"], call_id=self.call_id, status="Submitted", created_at=draft["submitted_at"],
             updated_at=draft["submitted_at"])
         args = draft["args"]
@@ -276,6 +304,11 @@ class CustomerServices:
                 matches = list(self.db.customers.find({"customer_id": draft["customer_id"], "data_type": "SYNTHETIC"}, **kwargs).limit(2))
                 if len(matches) != 1 or matches[0].get("account_status", "").casefold() not in {"active", "suspended"}:
                     raise ToolError("CALLER_CHANGED", "The customer is no longer available for submission.")
+                if draft["address_source"] == "customer_record":
+                    field = "delivery_address" if draft["name"] == "draft_equipment_order" else "location_address"
+                    saved = customer_address(matches[0], delivery=draft["name"] == "draft_equipment_order")
+                    if saved != args.get(field):
+                        raise ToolError("ADDRESS_CHANGED", "The saved address changed. Prepare a fresh draft using the updated address and ask for confirmation again.")
             if draft["name"] == "draft_complaint":
                 if args["order_id"]: self.owned("orders", "order_id", args["order_id"], base, session=session)
                 if args["delivery_id"]:
@@ -332,5 +365,11 @@ class CustomerServices:
 
     def for_agent(self, result):
         if self.share_details: return json.dumps(json_safe(result), ensure_ascii=True)
-        if result.get("requires_confirmation"): return json.dumps(result, ensure_ascii=True)
+        if result.get("requires_confirmation"):
+            preview = deepcopy(result)
+            if preview.get("address_source") == "customer_record":
+                preview["draft"].pop("location_address", None)
+                preview["draft"].pop("delivery_address", None)
+                preview["address_on_file"] = True
+            return json.dumps(preview, ensure_ascii=True)
         return json.dumps({"ok": result.get("ok", False), "message": "The local service result is shown on screen; private database values are not shared in this session."})

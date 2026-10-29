@@ -175,6 +175,79 @@ def test_suspended_synthetic_customer_can_complain_without_reactivation(services
     assert services.db.customers.find_one({'customer_id':'C1'})['account_status'] == 'Suspended'
 
 
+def test_visit_and_order_use_saved_address_without_dictation(services):
+    saved = dict(house_number=123,street_address=456789,city='Fixture City',state='Fixture State')
+    services.db.customers.update_one({'customer_id':'C1'},{'$set':{'service_address':saved}})
+    context = services.execute('get_service_context',{})
+    assert context['saved_service_address_available'] and context['saved_delivery_address_available']
+    draft = services.execute('draft_service_request',dict(service_type='service_booking',description='Please fix the missing TV signal.'))
+    assert draft['address_source'] == 'customer_record'
+    assert draft['draft']['location_address'] == 'House 123, Street 456789, Fixture City, Fixture State'
+    assert arm_and_confirm(services)['service_request']['location_address'] == draft['draft']['location_address']
+    order = services.execute('draft_equipment_order',dict(items=[dict(product_code='REMOTE',quantity=1)]))
+    assert order['address_source'] == 'customer_record'
+    submitted = arm_and_confirm(services)
+    assert submitted['order']['delivery_address'] == draft['draft']['location_address']
+    assert submitted['delivery']['delivery_address'] == draft['draft']['location_address']
+
+
+def test_city_state_only_is_not_a_delivery_address(services):
+    services.db.customers.update_one({'customer_id':'C1'},{'$set':{'city':'Fixture City','state':'Fixture State'}})
+    with pytest.raises(ToolError,match='No complete delivery address'):
+        services.execute('draft_equipment_order',dict(items=[dict(product_code='REMOTE',quantity=1)]))
+    assert services.pending is None
+    # A complaint can still be filed without a delivery/visit address.
+    assert services.execute('draft_complaint',dict(category='no_signal',description='There is no TV signal.'))['ok']
+
+
+def test_relocation_requires_new_destination_and_order_override_does_not_edit_profile(services):
+    services.db.customers.update_one({'customer_id':'C1'},{'$set':{'service_address':'Original fixture home address'}})
+    with pytest.raises(ToolError,match='new destination'):
+        services.execute('draft_service_request',dict(service_type='relocation',description='Move the connection to my new house.'))
+    preview = services.execute('draft_equipment_order',dict(items=[dict(product_code='REMOTE',quantity=1)],delivery_address='Different fixture office address'))
+    assert preview['address_source'] == 'caller_supplied'
+    arm_and_confirm(services)
+    assert services.db.customers.find_one({'customer_id':'C1'})['service_address'] == 'Original fixture home address'
+
+
+def test_saved_address_change_requires_new_confirmation(services):
+    services.db.customers.update_one({'customer_id':'C1'},{'$set':{'service_address':'Original fixture address'}})
+    services.execute('draft_equipment_order',dict(items=[dict(product_code='REMOTE',quantity=1)]))
+    services.db.customers.update_one({'customer_id':'C1'},{'$set':{'service_address':'Updated fixture address'}})
+    with pytest.raises(ToolError,match='saved address changed'): arm_and_confirm(services)
+    assert services.db.orders.count_documents({}) == 0
+
+
+def test_saved_address_is_hidden_in_draft_when_sharing_is_disabled(services):
+    services.db.customers.update_one({'customer_id':'C1'},{'$set':{'service_address':'PRIVATE SAVED FIXTURE ADDRESS'}})
+    services.share_details = False
+    preview = services.execute('draft_equipment_order',dict(items=[dict(product_code='REMOTE',quantity=1)]))
+    exported = services.for_agent(preview)
+    assert 'PRIVATE SAVED FIXTURE ADDRESS' not in exported
+    assert json.loads(exported)['address_on_file']
+
+
+def test_synthetic_address_seed_is_idempotent_preserves_real_records_and_demo_entry(services):
+    from telecom_support.synthetic_addresses import seed_synthetic_addresses
+    services.db.customers.insert_one(dict(customer_id='REAL',data_type='REAL',account_status='Active'))
+    result = seed_synthetic_addresses(services.db,'0000000001',randbelow=lambda bound:0)
+    assert result['addresses_added'] == 2 and result['demo_customer_has_saved_address']
+    row = services.db.customers.find_one({'customer_id':'C1'})
+    assert row['house_number'] == 100 and row['street_address'] == 100000
+    assert row['smartcard_id'] == 'PRIVATE-CARD'
+    assert services.db.customers.find_one({'customer_id':'REAL'}).get('service_address') is None
+    assert seed_synthetic_addresses(services.db,'0000000001')['addresses_added'] == 0
+
+
+def test_synthetic_seed_preserves_existing_saved_address(services):
+    from telecom_support.synthetic_addresses import seed_synthetic_addresses
+    services.db.customers.update_one({'customer_id':'C1'},{'$set':{'home_address':'Existing fixture house address'}})
+    seed_synthetic_addresses(services.db,'0000000001',randbelow=lambda bound:0)
+    row = services.db.customers.find_one({'customer_id':'C1'})
+    assert row['home_address'] == 'Existing fixture house address'
+    assert 'service_address' not in row
+
+
 def test_agent_view_shares_only_approved_service_fields(services):
     services.execute('draft_equipment_order',order_args())
     result = arm_and_confirm(services)

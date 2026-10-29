@@ -53,6 +53,11 @@ relationships, transaction behaviour, confirmation flow and permitted spoken dat
 | `username` | String optional | Registered username for local synthetic verification |
 | `phone_normalized` | String optional | Normalized +91 simulated caller lookup |
 | `smartcard_id` | String optional | Stored synthetic smartcard ID, checked locally and excluded from model context |
+| `service_address` | String or object optional | Saved house/street address used for service visits and as a delivery fallback |
+| `delivery_address`, `home_address`, `address` | String or object optional | Supported saved address aliases; purpose-specific fields take precedence |
+| `house_number` | Integer optional | Synthetic fixture house number, three digits |
+| `street_address` | Integer optional | Synthetic six-digit street identifier; not a postcode |
+| `address_data_type` | String optional | `SYNTHETIC` for explicitly generated fictional fixture addresses |
 
 **Primary Key:** `customer_id`
 

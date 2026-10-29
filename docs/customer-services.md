@@ -53,15 +53,34 @@ technician misconduct, poor support, pricing concerns, billing disputes and othe
 service issues. A complaint records the caller's report, not a verified finding.
 
 Service requests cover a technician/service visit, new connection, relocation and
-connection cancellation. A visit requires an address; a supplied preferred window
+connection cancellation. Visits use the matched customer's saved address by
+default; the caller does not need to dictate it. A supplied preferred window
 is recorded as a preference. An actual appointment remains `scheduled_at: null`
 until an operator confirms it. Cancellation is a request for review: existing
 subscriptions, payments and customer account status are not changed.
 
 Equipment requests support dishes, set-top/cable boxes, coaxial cable, duplicate
 smartcards, remotes, connectors and power adapters. Quantities are bounded; cable
-requests need a length in metres. The address is captured for the requested delivery.
+requests need a length in metres. Delivery uses the customer's saved address unless
+the caller explicitly asks for a different destination. The selected address is
+snapshotted into the draft/order/delivery and tagged with its source; an override
+does not edit the customer's profile. If the saved address changes before commit,
+a fresh draft/confirmation is required.
 Supported request types are not an inventory or availability guarantee.
+
+Address resolution prefers purpose-specific `service_address` or `delivery_address`,
+then `home_address`/`address`, and supports a full string or structured house/street
+fields. City/state alone is never treated as a house address. Complaints can still
+be recorded if no address exists. New callers need to add an address once; a
+relocation always needs its new destination rather than silently using the old home.
+
+`python scripts/seed_customer_addresses.py` explicitly backfills missing **synthetic**
+fixture addresses and ensures the configured `CALLER_PHONE` customer exists. It
+generates an integer house number from 100 to 999 and an integer street identifier
+from 100000 to 999999, retaining the customer's existing city/state/country. The
+street identifier is not a postcode. Records are marked `address_data_type: SYNTHETIC`.
+Existing complete/partial addresses and non-synthetic records are preserved. The
+script is idempotent and does not run automatically on calls or change orders.
 
 Confirmed equipment requests start as `AwaitingQuote`. Their linked delivery starts
 as `NotDispatched`. Prices, stock, holder, location, ETA and delivery charge are
@@ -93,8 +112,8 @@ The managed agent has these additional tools:
 | --- | --- |
 | `get_service_context` | Check whether the local caller is recognized; no personal profile returned |
 | `draft_complaint` | Prepare a complaint form |
-| `draft_service_request` | Prepare a booking, connection, relocation or cancellation request |
-| `draft_equipment_order` | Prepare items, quantities, cable length and address |
+| `draft_service_request` | Prepare a request using the saved address; collect a new destination for relocation |
+| `draft_equipment_order` | Prepare items/quantities/length with the saved address by default |
 | `get_service_requests` | Read this caller's recent requests or one reference |
 | `get_orders` | Read this caller's orders and linked delivery facts |
 | `track_delivery` | Read a requested delivery/order or the most recent delivery |
