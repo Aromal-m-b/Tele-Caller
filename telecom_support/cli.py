@@ -55,6 +55,8 @@ def run_menu(application, *, read=input, write=print):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Customer support knowledge base")
+    parser.add_argument("--backend", choices=["pipeline", "deepgram-agent"], default="pipeline",
+        help="Voice backend: existing Gemini pipeline or managed Deepgram Voice Agent (public RAG)")
     parser.add_argument("--source", choices=["web", "index"], default="index")
     parser.add_argument("--url", default=DEFAULT_URL)
     parser.add_argument("--index-dir", help="Trusted local FAISS index directory")
@@ -74,6 +76,10 @@ def main(argv=None):
     parser.add_argument("--caller-number", help="Simulated caller; defaults to CALLER_PHONE in .env")
     parser.add_argument("--no-database", action="store_true", help="Disable MongoDB tools")
     args = parser.parse_args(argv)
+    if args.backend == "deepgram-agent" and (args.text or args.question is not None or args.silent or args.demo_customer):
+        parser.error("deepgram-agent is a microphone/public-RAG backend; omit --text, --question, --silent and --demo-customer.")
+    if args.backend == "deepgram-agent" and args.speech_pause is not None:
+        parser.error("--speech-pause applies to the pipeline backend; Deepgram Voice Agent manages its own turn detection.")
     from .rag import build_application
     application, client, audit = None, None, None
     try:
@@ -84,14 +90,20 @@ def main(argv=None):
                 voice=args.tts_voice, output_device=args.output_device, audio_output=not args.silent,
                 idle_timeout=args.idle_timeout, idle_grace=args.idle_grace, endpointing_ms=args.speech_pause,
                 idle_checkin=args.idle_checkin)
-        service, client = database_service(args.demo_customer, args.no_database)
+        service, client = database_service(args.demo_customer, args.no_database or args.backend == "deepgram-agent")
         settings = Settings.load()
         from .call_audit import CallAudit
         from .caller import CallerSession
         from .tickets import TicketService
         from .settings import ROOT
         caller_phone = args.caller_number or os.getenv("CALLER_PHONE") or "0000000000"
-        audit = CallAudit(ROOT / "output" / "calls", caller=caller_phone, model=settings.model)
+        agent_config = None
+        model_label = settings.model
+        if args.backend == "deepgram-agent":
+            from .deepgram_agent import AgentConfig
+            agent_config = AgentConfig.load()
+            model_label = "deepgram-agent:" + agent_config.provider + "/" + agent_config.model
+        audit = CallAudit(ROOT / "output" / "calls", caller=caller_phone, model=model_label)
         audit.mode = "text" if args.text or args.question is not None else "voice"
         caller = CallerSession(service, caller_phone, call_id=audit.call_id, audit=audit)
         if service and args.demo_customer:
@@ -111,7 +123,8 @@ def main(argv=None):
         if args.question is not None:
             print(application.generate(args.question))
         else:
-            print("Text model: " + settings.model)
+            print("Voice backend: " + args.backend)
+            print("Text model: " + model_label)
             print("Knowledge base: " + (str(args.index_dir or Settings.index_dir)
                                           if args.source == "index" else args.url))
             if service:
@@ -126,7 +139,12 @@ def main(argv=None):
                         if line.startswith("You: ") and caller.stage:
                             audit.redact(line[5:])
                         audit.write(line)
-                    asyncio.run(run_microphone(application, speech_settings, write=write))
+                    if args.backend == "deepgram-agent":
+                        from .deepgram_agent import run_voice_agent
+                        print("Managed agent: public knowledge only; private account/ticket tools are available in --backend pipeline.")
+                        asyncio.run(run_voice_agent(application, speech_settings, config=agent_config, write=write))
+                    else:
+                        asyncio.run(run_microphone(application, speech_settings, write=write))
                 except KeyboardInterrupt:
                     print("\nStopped listening.")
     except RuntimeError as exc:

@@ -27,6 +27,11 @@ persona/scope policy and appropriate account tools.
 API usage is billable. Headphones reduce speaker echo. No customer database is
 needed for the demo. Say “please end the call” to finish.
 
+To try the optional managed Deepgram Voice Agent, run
+`python main.py --backend deepgram-agent` or double-click **start-agent.bat**.
+It uses the same FAISS knowledge base for public support; account/ticket features
+remain in the default backend. See [agent setup and limits](docs/deepgram-agent.md).
+
 [Owner quickstart](docs/quickstart.md) · [Business case and cost model](docs/business-case.md)
 · [Technical architecture](docs/architecture.md) · [Developer guide](docs/developer-guide.md)
 

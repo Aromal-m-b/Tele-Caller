@@ -97,6 +97,19 @@ class CallAudit(BaseCallbackHandler):
             duration = self.clock() - self.started
             stt_duration = ((self.stt_end if self.stt_end is not None else self.clock()) - self.stt_start
                             if self.stt_start is not None else 0)
+            if getattr(self, "backend", None) == "deepgram-agent":
+                rate = getattr(self, "agent_rate_per_minute", None)
+                summary = dict(call_id=self.call_id, backend="deepgram-agent", model=self.model,
+                    duration_seconds=round(duration, 3), agent_connected_seconds=round(stt_duration, 3),
+                    agent_rate_per_minute_usd=rate,
+                    estimated_total_usd=stt_duration / 60 * rate if rate is not None else None,
+                    input_tokens=None, output_tokens=None, total_tokens=None,
+                    cost_is_estimate=True, complete_provider_invoice=False,
+                    cost_basis="Managed agent billed on connection time. Hosted LLM tokens unavailable, not zero. "
+                        "No separate STT/TTS/model costs added. Query embedding usage/cost is unavailable and excluded. "
+                        "Configured rate must match the selected managed tier; not a provider invoice.")
+                self.event("\nUSAGE AND COST\n" + json.dumps(summary, indent=2))
+                return
             summary = dict(call_id=self.call_id, customer_id=self.identity, duration_seconds=round(duration, 3),
                 gemini_requests=self.requests, input_tokens=self.input_tokens, output_tokens=self.output_tokens,
                 total_tokens=self.input_tokens + self.output_tokens, requests_without_usage_metadata=self.missing_usage,

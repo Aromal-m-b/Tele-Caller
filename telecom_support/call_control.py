@@ -55,7 +55,7 @@ class CallControl:
             return "end"
         if self.pending:
             self.pending = False
-            if re.fullmatch(r"(?:(?:yes|yeah|yep|sure|okay|ok)(?: (?:of course|please|go ahead|absolutely|sure|thank you|thanks))*|"
+            if re.fullmatch(r"(?:(?:yes|yeah|yep|sure|okay|ok)(?: (?:yes|yeah|yep|of course|please|go ahead|absolutely|sure|thank you|thanks))*|"
                             r"of course|absolutely|go ahead|please do|confirm|confirmed)", value):
                 return "end" if started_at >= self.asked_at else "ask"
             if re.fullmatch(r"(?:no|no thanks|no thank you|not yet|not now|keep (?:it|the call) open|stay on)", value):
