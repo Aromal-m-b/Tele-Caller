@@ -115,12 +115,15 @@ def scalar(value):
 
 def affirmative(text):
     value = " ".join(re.sub(r"[^\w\s']", " ", text.casefold()).split())
-    action = r"(?:submit|register|file|place|book|confirm) (?:it|(?:(?:the|this) )?(?:complaint|request|form|order|booking|appointment))"
-    agreement = r"(?:yes|yeah|yep|okay|ok|alright|sure|absolutely|certainly|of course|go ahead|please do|confirm|confirmed)"
+    target = r"(?:it|that|(?:(?:the|this|my) )?(?:complaint|request|form|order|booking|appointment))"
+    action = r"(?:(?:submit|send|register|file|place|book|confirm|do) " + target + r"|proceed(?: with " + target + r")?|go ahead(?: with " + target + r")?)"
+    intention = r"(?:i (?:would like|want)(?: you)? to|i'd like(?: you)? to|you can)"
+    request = r"(?:(?:" + intention + r") )?(?:just )?" + action
+    agreement = r"(?:yes|yeah|yep|okay|ok|alright|sure|absolutely|certainly|of course|please do|confirm|confirmed|i agree|that's right|that is right)"
     courtesy = r"(?:please|thanks|thank you|dude|bro|mate|maya|sir|ma'am)"
     # Full-string grammar: corrections, conditions and questions are not consent.
-    return bool(re.fullmatch(r"(?:" + courtesy + r" )*(?:" + agreement + r"|" + action + r")"
-        r"(?: (?:" + agreement + r"|" + courtesy + r"|now|and|" + action + r"))*", value))
+    return bool(re.fullmatch(r"(?:" + courtesy + r" )*(?:" + agreement + r"|" + request + r")"
+        r"(?: (?:" + agreement + r"|" + courtesy + r"|now|right now|and|" + request + r"|" + intention + r"))*", value))
 
 
 def submission_question(text):
@@ -278,7 +281,9 @@ class CustomerServices:
                     return {"ok": False, "message": "Explicit confirmation is needed after the complete draft question has played. Ask again; nothing submitted."}
                 return self.confirm()
             self.armed_at = float("inf")
-            return None
+            return {"ok": True, "state": "needs_clarification", "submission_attempted": False,
+                "requires_confirmation": True,
+                "message": "The caller reply was not recognized as unconditional submission consent. Nothing was submitted. Handle any question or correction, then ask explicitly whether to submit the reviewed draft. Local submission IS available after confirmation; do not say you cannot submit, invent a failure, or suggest ending the call instead."}
 
     def confirm(self):
         """Internal only. The agent tool surface deliberately has no confirm function."""

@@ -15,7 +15,7 @@ from .guardrails import SupportScopeGuard
 from .latency import TurnTiming
 from .speech_input import MicrophoneSource, SpeechInputError
 from .speech_output import SpeakerDevice
-from .customer_services import DEFINITIONS as SERVICE_DEFINITIONS, affirmative, submission_question, tool_definitions
+from .customer_services import DEFINITIONS as SERVICE_DEFINITIONS, submission_question, tool_definitions
 from .account_tools import ToolError
 
 AGENT_URL = "wss://agent.deepgram.com/v1/agent/converse"
@@ -58,6 +58,9 @@ A draft is not registered.
 Only a later real caller confirmation can submit it locally; you have no confirm
 function. Never claim success until a client operation-result notice says it
 committed. If the caller changes details, prepare a revised draft and ask again.
+The client CAN submit confirmed requests; never tell callers they must submit it
+themselves. A needs_clarification result means clarify the caller's intent, not
+that submission is unavailable. Do not pivot to ending the call during submission.
 For client operation-result notices, acknowledge the supplied result; do not
 prepare another draft or ask for submission again after a committed result.
 Use recorded tracking facts for location, ETA, courier/holder and charges. Unknown
@@ -367,7 +370,9 @@ class AgentSession:
                     self.service_turn += 1
                     start = self.timer.points["speech_detected"] if self.timer else self.clock()
                     pending = self.services.pending
-                    controls_submission = bool(pending and (affirmative(content) or content.strip().casefold().strip(".!?") in {"no", "no thanks", "cancel", "cancel it", "not now", "never mind"}))
+                    # Every reply to a pending form gets a local decision before
+                    # model speech/tools resume, including ambiguous confirmations.
+                    controls_submission = bool(pending)
                     if len([task for task in self.business_tasks if not task.done()]) >= 16:
                         raise SpeechInputError("Too many service requests are pending.")
                     if controls_submission: self.service_reply_inflight += 1

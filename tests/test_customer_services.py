@@ -295,12 +295,40 @@ def test_submission_affirmative_handles_action_phrases(text):
     assert affirmative(text)
 
 
+@pytest.mark.parametrize('reply', [
+    'Yes. I would like to', 'Yes. Just send it now.',
+    'I would like you to submit my complaint please.', 'Please go ahead with it.',
+    'Yeah I want to send it now.', 'Sure, you can register the request.',
+    "Yes, I'd like to.", 'Just do it.', 'Please proceed with the booking.'
+])
+def test_contextual_confirmation_submits_reviewed_draft(services, reply):
+    services.execute('draft_complaint',dict(category='no_signal',description='The television has no signal.'))
+    assert arm_and_confirm(services, reply)['ok']
+    assert services.db.service_requests.count_documents({}) == 1
+
+
+@pytest.mark.parametrize('reply', [
+    'Yes I would like to change the address.', 'Yes just send it if it is free.',
+    'I would like to know the price.', 'Do it later.', 'Do not send it.',
+    'Yes just send it but change the description.', 'Yes I want to cancel instead.'
+])
+def test_conditional_or_corrective_confirmation_clarifies_without_submission(services, reply):
+    services.execute('draft_complaint',dict(category='no_signal',description='The television has no signal.'))
+    services.arm(services.pending['draft_id'],90)
+    result = services.resolve_reply(reply,95)
+    assert result['state'] == 'needs_clarification'
+    assert not result['submission_attempted']
+    assert services.db.service_requests.count_documents({}) == 0
+    assert not services.resolve_reply('Yes.',96)['ok']
+
+
 @pytest.mark.parametrize('text',['Yes, but change the address first.','Yes, what is the price?','Do not submit the complaint.', 'Okay, if it is free.', 'Of course not.', 'Yes please wait.'])
 def test_qualified_yes_is_not_submission_consent(text):
     assert not affirmative(text)
 
 
-@pytest.mark.parametrize('reply', ['Yes, please. Yes.', 'Yes. Okay. Go ahead,', 'Of course, dude.'])
+@pytest.mark.parametrize('reply', ['Yes, please. Yes.', 'Yes. Okay. Go ahead,', 'Of course, dude.',
+    'Yes. I would like to', 'Yes. Just send it now.'])
 def test_agent_session_confirms_from_real_reply_after_question_playback(services, reply):
     from telecom_support.deepgram_agent import AgentSession, AgentConfig, agent_settings
     from telecom_support.speech_input import SpeechSettings
@@ -363,6 +391,29 @@ def test_submission_diagnostics_and_notification_failure_are_separate(services):
         session.service_reply_inflight = 1
         await session.service_reply('Another statement',96,turn=1)
         assert session.service_reply_inflight == 1
+    asyncio.run(run())
+
+
+def test_unclear_reply_delivers_clarification_notice_without_submission(services):
+    from telecom_support.deepgram_agent import AgentSession, AgentConfig
+    from telecom_support.speech_input import SpeechSettings
+    async def run():
+        sent = []
+        async def send(text): sent.append(json.loads(text))
+        session = AgentSession(SimpleNamespace(customer_services=services),SpeechSettings('fake'),AgentConfig(),
+            SimpleNamespace(send=send),SimpleNamespace(),write=lambda _:None,clock=lambda:100)
+        services.execute('draft_complaint',dict(category='no_signal',description='The television has no signal.'))
+        services.arm(services.pending['draft_id'],90)
+        await session.event(dict(type='ConversationText',role='user',content='Yes, but change the description first.'))
+        assert session.service_reply_inflight
+        await asyncio.gather(*session.business_tasks)
+        assert not session.service_reply_inflight
+        assert not session.ending
+        assert services.db.service_requests.count_documents({}) == 0
+        notice = [item for item in sent if item['type'] == 'InjectUserMessage'][-1]
+        assert 'needs_clarification' in notice['content']
+        assert 'Local submission IS available' in notice['content']
+        assert not services.resolve_reply('Yes.',101)['ok']
     asyncio.run(run())
 
 

@@ -54,6 +54,10 @@ caller confirmation after the review question finishes playing triggers the loca
 transaction; ordinary confirmations can include polite fillers and repeated yes/okay.
 Corrections and conditional replies require review again. Repeating an identical
 draft preserves its confirmation readiness; changing the draft requires fresh consent.
+Consent grammar supports contextual replies such as “Yes, I would like to” and
+requests such as “Just send it now.” Unrecognized replies produce an explicit
+`needs_clarification` result before model speech resumes, so they cannot silently
+fall through as submission failures or claims that the caller must file it themselves.
 After submission, late draft retries in the same caller turn return the receipt.
 Transaction errors are logged separately from failures to send the result back to
 the voice provider. A notification failure does not undo or duplicate a saved request.
