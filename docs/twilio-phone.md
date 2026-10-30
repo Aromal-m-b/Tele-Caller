@@ -5,6 +5,24 @@ Twilio Media Stream. It reuses the managed Deepgram agent, FAISS tools, syntheti
 customer-service tools, confirmation flow and private call logs. The standard
 desktop launchers remain available.
 
+## Account requirement: Media Streams must be available
+
+Twilio's current Voice trial environment strips `<Stream>` from custom TwiML and
+replaces blocked verbs with an announcement. This bridge requires bidirectional
+Media Streams, so that trial environment cannot connect the Deepgram agent.
+An HTTP 200 from `/voice` only confirms webhook delivery; it does not establish
+an audio connection. If the stream instruction is removed, the following Hangup
+instruction can immediately finish the call without opening `/media-stream`.
+
+Use a Twilio account that supports Media Streams. Twilio documents upgrading to
+unlock the blocked functionality; its shared trial number is not retained after
+upgrade, so configure your own voice-enabled number for that account. Review the
+account and number costs before doing so. Local desktop voice remains available
+without Twilio; Deepgram/Gemini usage is still billable.
+
+Sources: [Voice trial blocked verbs](https://www.twilio.com/docs/usage/trials/try-out-voice#blocked-verbs)
+and [shared trial numbers](https://www.twilio.com/docs/usage/trials#twilio-trial-numbers).
+
 ```text
 Caller → Twilio number → POST /voice → ngrok → Uvicorn/FastAPI
                            ↓
@@ -135,6 +153,7 @@ retain webhook/media details according to your local/account settings.
 | HTTP 503 capacity | Another call or an unexpired 90-second stream reservation occupies the slot |
 | HTTP 403 | Check the exact ngrok origin, Twilio account token and allowed calling number |
 | Missing signature on a genuine inbound call | Inspect the delivery route; optionally use the live-call verification mode described above |
+| HTTP 200 followed by a trial announcement and immediate hangup, without a WebSocket | Check the account requirement above: trial sanitization strips Stream before the agent can connect |
 | Stream opens then closes | Check private server diagnostics, Gemini/Deepgram access and trusted index availability |
 | No or distorted audio | Confirm bidirectional Connect/Stream and mu-law/8 kHz mono start metadata |
 

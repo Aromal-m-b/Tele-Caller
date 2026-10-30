@@ -64,6 +64,9 @@ API usage is billable. A knowledge-only demo needs no customer database.
 For inbound phone calls through **Twilio + ngrok + Uvicorn**, install
 `requirements-phone.txt` and follow the [phone bridge setup](docs/twilio-phone.md).
 It connects the managed agent to a signed bidirectional telephone audio stream.
+Twilio's current Voice trial strips the required Stream instruction; use an
+account with Media Streams enabled. A successful webhook response alone does
+not mean the call's audio reached the agent.
 
 For complaints, service requests, equipment orders and tracking, configure
 MongoDB, a synthetic caller and the approved synthetic-data sharing option as
