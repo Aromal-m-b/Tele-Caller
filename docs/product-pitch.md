@@ -17,7 +17,8 @@ by the database. Staff can review the structured record and private call transcr
 
 The current product demonstrates this using a telecom/DTH business and synthetic
 customers. It is a local application you can run and evaluate, with source code
-you can adapt. It is not yet a hosted telephone answering service.
+you can adapt. An optional [Twilio/ngrok bridge](twilio-phone.md) connects inbound
+pilot calls to the managed agent. It is not a hosted telephone answering service.
 
 ## What an owner gets today
 
@@ -98,7 +99,7 @@ with rates applicable to your chosen provider accounts.
 
 | Available in this repository | Additional work for a real deployment |
 | --- | --- |
-| Local microphone and speaker session | Telephone gateway and inbound number routing |
+| Local voice session or allowlisted inbound Twilio/ngrok pilot | Production routing, availability and capacity validation |
 | Synthetic caller binding | Trusted authentication and authorization for real customers |
 | Reference telecom knowledge and tools | Approved business content, persona and domain-specific workflows |
 | Local transcripts and diagnostics | Controlled retention, access, monitoring and operational alerts |

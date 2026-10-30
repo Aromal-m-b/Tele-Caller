@@ -9,6 +9,10 @@ python main.py --backend deepgram-agent
 Or double-click `start-agent.bat` after the normal `setup.bat`. The regular
 `start.bat` and `python main.py` retain the existing Gemini pipeline.
 
+For an inbound Twilio call instead of desktop audio, use the separate
+[Uvicorn/ngrok phone bridge](twilio-phone.md). It reuses this backend through
+network audio adapters without opening a local microphone or speaker.
+
 This adapts the supplied pseudocode to the current Voice Agent protocol. One
 connection to `wss://agent.deepgram.com/v1/agent/converse` carries microphone PCM,
 control messages, function calls, transcript events and streamed reply PCM. The

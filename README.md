@@ -61,6 +61,10 @@ The agent speaks naturally; this walkthrough is a demo outline, not a reply scri
 The first launch prepares a small fictional knowledge index if none exists.
 API usage is billable. A knowledge-only demo needs no customer database.
 
+For inbound phone calls through **Twilio + ngrok + Uvicorn**, install
+`requirements-phone.txt` and follow the [phone bridge setup](docs/twilio-phone.md).
+It connects the managed agent to a signed bidirectional telephone audio stream.
+
 For complaints, service requests, equipment orders and tracking, configure
 MongoDB, a synthetic caller and the approved synthetic-data sharing option as
 explained in the [service setup](docs/customer-services.md). Keep `.env`, customer
@@ -105,10 +109,12 @@ explains the outcomes to measure without assuming vendor prices or a guaranteed 
 This repository delivers a runnable local application, Windows launchers, knowledge
 retrieval, two voice backends, synthetic service workflows and developer documentation.
 It currently handles one local conversation per process through a microphone and
-speaker. Incoming caller identity and disconnection are simulated locally.
+speaker. An optional inbound Twilio bridge now supports telephone audio and the
+signed caller number through ngrok/Uvicorn; the desktop mode still simulates calls.
 
-A public phone service still requires a SIP/PSTN gateway, trusted customer
-authentication, human handoff, operational monitoring and data-handling controls.
+A production phone service still requires trusted customer authentication, human
+handoff, operational monitoring and data-handling controls. The Twilio bridge is
+an allowlisted inbound pilot, not a deployed multi-business answering service.
 Multi-business hosting also requires tenant isolation, concurrency and budget controls.
 Changing industry requires adapting the knowledge, persona, scope and data model.
 This project is independent and is not an official Sun Direct service.

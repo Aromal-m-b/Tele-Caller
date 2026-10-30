@@ -155,6 +155,7 @@ def load_web_documents(url):
 class SupportRAG:
     def __init__(self, retriever, model, *, account_service=None, database_client=None):
         self.retriever = retriever
+        self.model = model
         self.memory = ConversationMemory()
         self.scope_guard = SupportScopeGuard()
         from .conversation import ConversationResponder

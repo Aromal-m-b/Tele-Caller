@@ -139,6 +139,8 @@ class AgentPlayback:
 
     def interrupt(self):
         self.epoch += 1
+        if hasattr(self.device, "interrupt"):
+            self.device.interrupt()
         while not self.queue.empty():
             self.queue.get_nowait()
         self.queued_bytes = 0
