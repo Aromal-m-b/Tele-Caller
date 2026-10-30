@@ -102,10 +102,30 @@ def test_livekit_input_is_resampled_to_agent_rate_and_bounded(monkeypatch):
     monkeypatch.setattr(livekit_audio.rtc,'AudioStream',Stream)
     async def run():
         audio=LiveKitAudio(SimpleNamespace())
+        read=asyncio.create_task(audio.read())
+        await asyncio.sleep(0)
         await audio.ingest(object())
-        assert await audio.read()==b'\0'*640
+        assert await read==b'\0'*640
         for _ in range(250): audio.queue.put_nowait(b'frame')
         with pytest.raises(RuntimeError,match='overflowed'): await audio.ingest(object())
+    asyncio.run(run())
+
+
+def test_startup_frames_do_not_fill_queue_before_agent_is_listening(monkeypatch):
+    from telecom_support import livekit_audio
+    class StartupStream:
+        def __init__(self,*args,**kwargs): self.left=600; self.aclose=AsyncMock()
+        def __aiter__(self): return self
+        async def __anext__(self):
+            if not self.left: raise StopAsyncIteration
+            self.left-=1
+            return SimpleNamespace(frame=SimpleNamespace(data=b'\0'*640))
+    monkeypatch.setattr(livekit_audio.rtc,'AudioStream',StartupStream)
+    async def run():
+        audio=LiveKitAudio(SimpleNamespace())
+        await audio.ingest(object())
+        assert audio.queue.empty()
+        assert not audio.listening
     asyncio.run(run())
 
 

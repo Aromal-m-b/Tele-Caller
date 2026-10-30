@@ -78,6 +78,9 @@ only to that session's caller identity. An idle startup without a microphone
 expires after 60 seconds. Sessions have a 15-minute upper bound and default to
 one concurrent call. Closing/leaving ends the agent and deletes the room; provider
 errors are logged by type without raw credentials or payloads.
+Microphone startup frames are discarded until the Deepgram session begins
+reading, preventing cold knowledge/provider startup from filling the input queue.
+Wait for Maya's introduction before explaining the issue.
 
 Interruption clears the LiveKit source queue and local reply queue. The source
 drain waits for local RTC playout before the normal call-control completion;
@@ -97,6 +100,8 @@ audio formats, interruption and cleanup. It uses mocks and no microphone.
 A separate live smoke check connected two RTC participants through the configured
 LiveKit project, sent generated silence to the Deepgram agent, and received its
 real synthesized audio. This verifies network audio, not human listening quality.
+The smoke check requires speech-level output and a matching assistant transcript,
+rather than counting RTC startup/comfort-noise frames as a successful agent reply.
 
 References: [LiveKit browser SDK](https://docs.livekit.io/reference/client-sdk-js/),
 [Python RTC SDK](https://docs.livekit.io/reference/python/livekit/rtc/),

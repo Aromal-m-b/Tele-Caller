@@ -98,6 +98,9 @@ class BrowserSessions:
         except Exception as error:
             row["status"]="error"
             logger.warning("WebRTC session ended (%s); private provider payload omitted.",type(error).__name__)
+            from .speech_input import SpeechInputError
+            if isinstance(error,SpeechInputError):
+                logger.warning("Voice transport diagnostic: %s",str(error))
         finally:
             try:
                 if self.delete_room: await self.delete_room(row["room"])

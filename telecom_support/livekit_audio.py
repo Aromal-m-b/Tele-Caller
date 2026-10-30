@@ -10,10 +10,13 @@ class LiveKitAudio:
     def __init__(self, source):
         self.source = source
         self.queue = asyncio.Queue(maxsize=250)
+        self.listening = False
 
     async def __aenter__(self): return self
     async def __aexit__(self, *_): return False
-    async def read(self): return await self.queue.get()
+    async def read(self):
+        self.listening = True
+        return await self.queue.get()
 
     async def write(self, pcm):
         if len(pcm)%2: raise SpeechInputError("Incomplete WebRTC PCM frame.")
@@ -26,6 +29,9 @@ class LiveKitAudio:
         stream = rtc.AudioStream(track,sample_rate=16000,num_channels=1,frame_size_ms=20,capacity=100)
         try:
             async for event in stream:
+                # The browser can publish while knowledge/provider startup is
+                # still running. Never accumulate that pre-listening audio.
+                if not self.listening: continue
                 try: self.queue.put_nowait(bytes(event.frame.data))
                 except asyncio.QueueFull:
                     raise SpeechInputError("WebRTC input queue overflowed.") from None
