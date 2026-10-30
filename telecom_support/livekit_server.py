@@ -33,6 +33,7 @@ class WebRTCConfig:
     access_code: str = field(repr=False)
     caller_phone: str = field(repr=False)
     max_calls: int = 1
+    dial_code: str = field(default="",repr=False)
 
     def __post_init__(self):
         parsed = urlsplit(self.url)
@@ -42,13 +43,15 @@ class WebRTCConfig:
             raise ValueError("Set LiveKit credentials and WEBRTC_ACCESS_CODE (at least 16 characters).")
         phone_number(self.caller_phone)
         if not 1<=self.max_calls<=10: raise ValueError("WEBRTC_MAX_CALLS must be 1 through 10.")
+        if self.dial_code and (not self.dial_code.isascii() or not self.dial_code.isdigit() or not 8<=len(self.dial_code)<=12):
+            raise ValueError("WEBRTC_DIAL_CODE must contain 8 through 12 digits.")
 
     @classmethod
     def load(cls):
         load_dotenv(ROOT / ".env")
         return cls(os.getenv("LIVEKIT_URL",""),os.getenv("LIVEKIT_API_KEY",""),
             os.getenv("LIVEKIT_API_SECRET",""),os.getenv("WEBRTC_ACCESS_CODE",""),
-            os.getenv("CALLER_PHONE",""),int(os.getenv("WEBRTC_MAX_CALLS","1")))
+            os.getenv("CALLER_PHONE",""),int(os.getenv("WEBRTC_MAX_CALLS","1")),os.getenv("WEBRTC_DIAL_CODE",""))
 
     def token(self, room, identity):
         return (api.AccessToken(self.api_key,self.api_secret).with_identity(identity)
@@ -134,6 +137,7 @@ def create_app(*,config=None,runtime=None,runner=None,delete_room=None):
     app=FastAPI(title="Tele-Caller WebRTC",lifespan=lifespan)
     app.state.sessions=None
     app.state.config=config
+    app.state.auth_failures=[]
     app.mount("/static",StaticFiles(directory=WEB / "static"),name="static")
 
     def settings():
@@ -144,9 +148,16 @@ def create_app(*,config=None,runtime=None,runner=None,delete_room=None):
 
     def authorize(request):
         cfg=settings()
+        now=time.monotonic()
+        app.state.auth_failures=[at for at in app.state.auth_failures if now-at<30]
+        if len(app.state.auth_failures)>=5:
+            raise HTTPException(429,"Too many incorrect codes. Wait 30 seconds and try again.")
         code=request.headers.get("X-Call-Access","")
-        if not code or not hmac.compare_digest(code.encode(),cfg.access_code.encode()):
-            raise HTTPException(401,"Enter the demo access code from your local .env file.")
+        access_match=hmac.compare_digest(code.encode(),cfg.access_code.encode())
+        dial_match=hmac.compare_digest(code.encode(),cfg.dial_code.encode()) if cfg.dial_code else False
+        if not code or not (access_match or dial_match):
+            app.state.auth_failures.append(now)
+            raise HTTPException(401,"That code did not match. Check WEBRTC_DIAL_CODE or WEBRTC_ACCESS_CODE in your .env.")
         return cfg
 
     @app.get("/")

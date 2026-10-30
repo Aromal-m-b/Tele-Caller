@@ -135,6 +135,7 @@ def test_injected_control_notice_is_not_a_real_user_or_hangup_consent():
 def test_handshake_greeting_and_direct_hangup_close_all_resources():
     async def run():
         closed, sent, frames = [], [], []
+        ready = []
         drained = asyncio.Event()
         class Device:
             async def __aenter__(self): return self
@@ -150,6 +151,7 @@ def test_handshake_greeting_and_direct_hangup_close_all_resources():
             async def __aenter__(self): return self
             async def __aexit__(self,*_): closed.append('socket')
             async def recv(self):
+                assert not ready
                 self.count += 1
                 return json.dumps({'type':'Welcome' if self.count == 1 else 'SettingsApplied'})
             async def send(self,text): sent.append(json.loads(text))
@@ -166,7 +168,8 @@ def test_handshake_greeting_and_direct_hangup_close_all_resources():
             assert kwargs['additional_headers']['Authorization'] == 'Token fake'
             return Socket()
         await asyncio.wait_for(run_voice_agent(SimpleNamespace(),SpeechSettings('fake',audio_output=True),
-            config=AgentConfig(),connect_factory=connect,microphone_factory=lambda **_:Mic(),device_factory=lambda **_:Device(),write=lambda _:None),2)
+            config=AgentConfig(),connect_factory=connect,microphone_factory=lambda **_:Mic(),device_factory=lambda **_:Device(),write=lambda _:None,on_ready=lambda:ready.append(True)),2)
+        assert ready == [True]
         assert sorted(closed) == ['mic','socket','speaker']
         assert sent[0]['type'] == 'Settings'
         assert sent[1]['type'] == 'InjectUserMessage'

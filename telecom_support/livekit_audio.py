@@ -65,9 +65,9 @@ async def run_livekit_call(url, token, caller_identity, prepare, stop, update,
         await asyncio.wait_for(microphone_ready.wait(),60)
         update("starting_agent")
         app, speech, config = await prepare()
-        update("connected")
         await runner(app,speech,config=config,write=app.audit.write,
-            microphone_factory=lambda **_:audio,device_factory=lambda **_:audio)
+            microphone_factory=lambda **_:audio,device_factory=lambda **_:audio,
+            on_ready=lambda:update("connected"))
 
     async def input_watch():
         await microphone_ready.wait()

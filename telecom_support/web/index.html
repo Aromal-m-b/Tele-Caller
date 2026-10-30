@@ -1,37 +1,52 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Tele-Caller · Talk to Maya</title>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#10151d">
+  <title>Tele-Caller · Dial Maya</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-  <link rel="stylesheet" href="/static/call.css">
+  <link rel="stylesheet" href="/static/call.css?v=dialer-1">
   <script defer src="/static/livekit-client.umd.min.js"></script>
-  <script defer src="/static/call.js"></script>
+  <script defer src="/static/call.js?v=dialer-1"></script>
 </head>
 <body>
-  <header><a class="brand" href="/">◔ <span>Tele-Caller</span></a><span class="badge">WEBRTC VOICE DEMO</span></header>
-  <main>
-    <section class="intro">
-      <p class="eyebrow">A CONVERSATION, WITHOUT THE PHONE LINE</p>
-      <h1>Your voice.<br>A little more help.</h1>
-      <p class="lead">Talk to Maya about your TV service, packages, complaints or equipment requests. Speak naturally, and interrupt whenever you need to.</p>
-      <div class="facts"><span>LiveKit WebRTC</span><span>Deepgram voice agent</span><span>Knowledge &amp; service tools</span></div>
-      <p class="note">This is a synthetic customer demo. Your configured demo account is selected on the server. Requests need confirmation; payments and dispatch are not performed.</p>
+  <svg class="icon-library" aria-hidden="true"><defs>
+    <symbol id="phone-icon" viewBox="0 0 24 24"><path d="M6 3 3 5c-1 5 11 17 16 16l2-3-5-4-2 2c-2-1-5-4-6-6l2-2-4-5Z"/></symbol>
+    <symbol id="mic-icon" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></symbol>
+    <symbol id="speaker-icon" viewBox="0 0 24 24"><path d="m11 4-6 5H2v6h3l6 5V4ZM15 8a6 6 0 0 1 0 8M18 4a11 11 0 0 1 0 16"/></symbol>
+    <symbol id="delete-icon" viewBox="0 0 24 24"><path d="m8 5-6 7 6 7h13V5H8Zm4 4 6 6m0-6-6 6"/></symbol>
+    <symbol id="shield-icon" viewBox="0 0 24 24"><path d="m12 2 8 3v6c0 5-8 11-8 11S4 16 4 11V5l8-3Zm-4 9 3 3 5-6"/></symbol>
+  </defs></svg>
+  <main id="device" class="device" data-phase="dialer">
+    <header class="topbar"><a href="/" class="brand">◔ <span>Tele-Caller</span></a><span class="private"><svg><use href="#shield-icon"/></svg>Private demo</span></header>
+    <section id="dial-screen" class="screen dial-screen" aria-label="Phone dialer">
+      <div class="dial-heading"><span class="eyebrow">VOICE SUPPORT</span><h1>Call Maya</h1><p>Your Sun Direct support assistant</p></div>
+      <div class="number-entry"><label for="code">Enter your private dial code</label><input id="code" type="password" inputmode="numeric" maxlength="64" autocomplete="off" spellcheck="false" aria-describedby="dial-error"><button id="erase" type="button" class="erase" aria-label="Delete last character"><svg><use href="#delete-icon"/></svg></button></div>
+      <p id="dial-error" class="dial-error" role="alert"></p>
+      <div class="keypad" aria-label="Dial keypad">
+        <button data-key="1" aria-label="1"><span>1</span><small>●●</small></button><button data-key="2" aria-label="2 ABC"><span>2</span><small>ABC</small></button><button data-key="3" aria-label="3 DEF"><span>3</span><small>DEF</small></button>
+        <button data-key="4" aria-label="4 GHI"><span>4</span><small>GHI</small></button><button data-key="5" aria-label="5 JKL"><span>5</span><small>JKL</small></button><button data-key="6" aria-label="6 MNO"><span>6</span><small>MNO</small></button>
+        <button data-key="7" aria-label="7 PQRS"><span>7</span><small>PQRS</small></button><button data-key="8" aria-label="8 TUV"><span>8</span><small>TUV</small></button><button data-key="9" aria-label="9 WXYZ"><span>9</span><small>WXYZ</small></button>
+        <button data-key="*" aria-label="Star"><span>∗</span><small>&nbsp;</small></button><button data-key="0" aria-label="0 plus"><span>0</span><small>+</small></button><button data-key="#" aria-label="Hash"><span>#</span><small>&nbsp;</small></button>
+      </div>
+      <button id="start" class="call-button green" aria-label="Call Maya"><svg><use href="#phone-icon"/></svg></button>
+      <span class="button-caption">Call</span>
+      <details class="code-help"><summary>Where is my dial code?</summary><p>Use WEBRTC_DIAL_CODE in your local .env file. You can also paste your existing WEBRTC_ACCESS_CODE into the field. This code selects the configured synthetic demo session, not a telephone number.</p></details>
+      <p class="fineprint">LiveKit voice · Headphones recommended</p>
     </section>
-    <section class="call-card" aria-label="Voice call controls">
-      <div class="card-top"><span class="label">MAYA / CUSTOMER SUPPORT</span><span id="connection" class="status">Ready to connect</span></div>
-      <div id="orb" class="orb" aria-hidden="true"><span>m</span></div>
-      <h2>Let’s talk.</h2>
-      <p id="message" role="status" aria-live="polite">Use headphones for a clearer conversation.</p>
-      <label for="code">Demo access code</label>
-      <input id="code" type="password" autocomplete="off" placeholder="WEBRTC_ACCESS_CODE from .env" spellcheck="false">
-      <button id="start" class="primary">Start conversation <span aria-hidden="true">↗</span></button>
-      <div class="secondary-controls"><button id="mute" disabled>Mute microphone</button><button id="end" disabled>End call</button></div>
+    <section id="call-screen" class="screen call-screen" aria-label="Calling screen" hidden>
+      <p class="call-label">TELE-CALLER VOICE</p>
+      <div class="avatar-wrap"><div class="ripple"></div><div class="ripple second"></div><div class="avatar" aria-hidden="true">m</div></div>
+      <h2>Maya</h2><p class="agent-role">Sun Direct support</p>
+      <div class="call-status" role="status" aria-live="polite"><p id="connection">Connecting…</p><p id="message">Allow microphone access to continue.</p><p id="timer" class="timer" hidden>00:00</p></div>
+      <div id="permission" class="permission-card" hidden><svg><use href="#mic-icon"/></svg><strong>Microphone access needed</strong><p id="permission-message">Allow microphone access in your browser to continue the call.</p><button id="retry-mic">Allow microphone / try again</button></div>
+      <div id="call-controls" class="call-controls" hidden><div><button id="mute" class="round-control" aria-label="Mute microphone" aria-pressed="false"><svg><use href="#mic-icon"/></svg></button><span id="mute-label">Mute</span></div><div><button id="speaker" class="round-control" aria-label="Mute speaker" aria-pressed="false"><svg><use href="#speaker-icon"/></svg></button><span id="speaker-label">Speaker</span></div></div>
       <button id="sound" class="sound" hidden>Enable speaker audio</button>
-      <p class="privacy">Microphone permission is requested when you start. Call transcripts are saved privately on the server. Audio is processed by LiveKit and the configured AI providers.</p>
+      <div class="hangup"><button id="end" class="call-button red" aria-label="Cancel call"><svg><use href="#phone-icon"/></svg></button><span id="end-label" class="button-caption">Cancel</span></div>
     </section>
+    <section id="ended-screen" class="screen ended-screen" aria-label="Call ended" hidden><div class="avatar small" aria-hidden="true">m</div><h2 id="ended-title">Call ended</h2><p id="ended-message">Your voice session is closed.</p><p id="ended-duration" class="timer" hidden></p><button id="redial" class="call-button green" aria-label="Call Maya again"><svg><use href="#phone-icon"/></svg></button><span class="button-caption">Call again</span><button id="back" class="back">Back to keypad</button></section>
+    <footer><svg><use href="#shield-icon"/></svg><span>Private call logs · Synthetic customer demo</span></footer>
   </main>
-  <footer><span>Built for useful conversations.</span><span>No Twilio connection required.</span></footer>
   <div id="remote-audio" hidden></div>
 </body>
 </html>

@@ -64,6 +64,8 @@ API usage is billable. A knowledge-only demo needs no customer database.
 For browser voice through **LiveKit WebRTC**, run `setup-webrtc.bat` once and then
 `start-webrtc.bat`. Open the local or ngrok page and enter the private demo access
 code. This uses the same Deepgram agent over browser audio, with no Twilio number.
+The phone-style page includes a keypad, microphone permission/retry screen,
+ringing, connected call timer and hang-up controls.
 See the [WebRTC guide](docs/livekit-webrtc.md). Use this route to test voice while
 Twilio's trial account blocks Media Streams.
 

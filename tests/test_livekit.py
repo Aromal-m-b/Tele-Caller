@@ -136,3 +136,33 @@ def test_shutdown_ends_active_session_and_deletes_room():
     with TestClient(app) as client:
         client.post('/api/sessions',headers={'X-Call-Access':config().access_code})
     deleted.assert_awaited_once()
+
+
+def test_numeric_dial_code_is_private_and_original_access_code_still_works():
+    cfg=replace(config(),dial_code='12345678')
+    assert cfg.dial_code not in repr(cfg)
+    async def runner(url,token,caller,prepare,stop,update): await stop.wait()
+    app=create_app(config=cfg,runtime=runtime(),runner=runner,delete_room=AsyncMock())
+    with TestClient(app) as client:
+        response=client.post('/api/sessions',headers={'X-Call-Access':cfg.dial_code})
+        assert response.status_code==200
+        assert cfg.dial_code not in response.text
+        sid=response.json()['session_id']
+        assert client.get('/api/sessions/'+sid,headers={'X-Call-Access':cfg.access_code}).status_code==200
+        assert client.delete('/api/sessions/'+sid,headers={'X-Call-Access':cfg.access_code}).status_code==200
+
+
+@pytest.mark.parametrize('code',['1234','1234567a','１２３４５６７８','1234567890123'])
+def test_invalid_numeric_dial_codes_are_rejected(code):
+    with pytest.raises(ValueError): replace(config(),dial_code=code)
+
+
+def test_dial_code_guessing_is_rate_limited():
+    cfg=config()
+    app=create_app(config=cfg,runtime=runtime())
+    with TestClient(app) as client:
+        for _ in range(5):
+            assert client.get('/api/sessions/unknown',headers={'X-Call-Access':'wrong'}).status_code==401
+        assert client.get('/api/sessions/unknown',headers={'X-Call-Access':cfg.access_code}).status_code==429
+        app.state.auth_failures.clear()
+        assert client.get('/api/sessions/unknown',headers={'X-Call-Access':cfg.access_code}).status_code==404

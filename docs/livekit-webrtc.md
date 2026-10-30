@@ -36,9 +36,11 @@ LIVEKIT_API_SECRET=your_livekit_secret
 CALLER_PHONE=your_synthetic_demo_customer_number
 WEBRTC_ACCESS_CODE=your_generated_private_browser_code
 WEBRTC_MAX_CALLS=1
+WEBRTC_DIAL_CODE=your_generated_eight_digit_code
 ```
 
-The setup helper generates the browser code without printing it or changing
+The setup helper generates the long browser code and an eight-digit keypad code
+without printing either or changing
 provider credentials. The configured caller selects a SYNTHETIC account locally.
 The browser cannot choose another account by submitting a phone number. This is
 an owner-operated demo, not authentication for real customers.
@@ -49,10 +51,34 @@ Stop another Uvicorn process using port 8000 with Ctrl+C. Run `start-webrtc.bat`
 .\.venv-livekit\Scripts\python.exe -m uvicorn telecom_support.livekit_server:app --host 127.0.0.1 --port 8000 --workers 1 --no-proxy-headers
 ```
 
-Open `http://127.0.0.1:8000/`, enter `WEBRTC_ACCESS_CODE`, and click **Start
-conversation**. Allow microphone access. If autoplay is blocked, use **Enable
+Open `http://127.0.0.1:8000/`, dial `WEBRTC_DIAL_CODE` on the keypad, and tap the
+green **Call** button. You can also paste the existing `WEBRTC_ACCESS_CODE` in
+the code field. Allow microphone access. If autoplay is blocked, use **Enable
 speaker audio**. Headphones reduce echo. The page provides mute and end controls;
 the assistant can also end the session through its existing call-control flow.
+
+## Dialer and calling screens
+
+The responsive page behaves like a phone dialer on a mobile or tablet:
+
+1. Enter the private code with the keypad, paste, or keyboard; use backspace to edit.
+2. Call opens **Connecting** and requests microphone permission. A persistent retry
+   card remains when permission is denied or the device is unavailable. No cloud
+   room is created until capture succeeds. The browser may require the user to
+   change the site's microphone setting before a retry can work; the page cannot
+   override a denied permission or force a blocked permission dialog to reappear.
+3. Once capture succeeds, the screen shows **Ringing — Connecting to agent** while
+   LiveKit, knowledge and Deepgram initialize.
+4. **Connected** and the call timer begin after Deepgram accepts its settings and
+   the audio adapters open, not merely when the browser joins a room.
+5. Mute, speaker mute, cancel/hang-up, redial and return-to-keypad controls manage
+   the session. Cancelling an outstanding permission request prevents a late grant
+   from accidentally starting a new call.
+
+The numeric dial code is an optional second demo credential, protected by a
+five-failed-attempt/30-second cooldown. The long code remains valid. Neither code
+is included in the client room token or page source. This is an owner demo, not
+a replacement for production user authentication.
 
 ## Use the ngrok page on another device
 
@@ -102,6 +128,9 @@ LiveKit project, sent generated silence to the Deepgram agent, and received its
 real synthesized audio. This verifies network audio, not human listening quality.
 The smoke check requires speech-level output and a matching assistant transcript,
 rather than counting RTC startup/comfort-noise frames as a successful agent reply.
+With Node.js installed, `tests/test_web_dialer.py` also runs six controller tests
+covering keypad editing, denied permission and retry, ringing/readiness, repeated
+clicks, and cancellation during the permission dialog. No real microphone is used.
 
 References: [LiveKit browser SDK](https://docs.livekit.io/reference/client-sdk-js/),
 [Python RTC SDK](https://docs.livekit.io/reference/python/livekit/rtc/),

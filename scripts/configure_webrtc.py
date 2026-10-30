@@ -16,8 +16,11 @@ def configure(root):
     if not values.get("WEBRTC_MAX_CALLS"):
         lines=[line for line in lines if not line.startswith("WEBRTC_MAX_CALLS=")]
         lines.append("WEBRTC_MAX_CALLS=1")
+    if not values.get("WEBRTC_DIAL_CODE"):
+        lines=[line for line in lines if not line.startswith("WEBRTC_DIAL_CODE=")]
+        lines.append("WEBRTC_DIAL_CODE="+f"{secrets.randbelow(10**8):08d}")
     path.write_text("\n".join(lines)+"\n",encoding="utf-8")
-    print("WebRTC access configured. Read WEBRTC_ACCESS_CODE in your local .env; keep it private.")
+    print("WebRTC access configured. Read WEBRTC_DIAL_CODE in your local .env for the keypad; the existing access code also works. Keep both private.")
 
 
 if __name__ == "__main__": configure(Path(__file__).resolve().parents[1])

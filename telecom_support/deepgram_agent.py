@@ -481,7 +481,7 @@ class AgentSession:
 
 
 async def run_voice_agent(app, speech, *, config=None, write=print, connect_factory=None,
-                          microphone_factory=MicrophoneSource, device_factory=SpeakerDevice):
+                          microphone_factory=MicrophoneSource, device_factory=SpeakerDevice, on_ready=None):
     config = config or AgentConfig.load()
     if not speech.audio_output:
         raise ValueError("Deepgram Voice Agent requires audio output; use the pipeline backend for --silent.")
@@ -507,6 +507,7 @@ async def run_voice_agent(app, speech, *, config=None, write=print, connect_fact
             async with device_factory(device=speech.output_device) as device:
                 async with microphone_factory(device=speech.device) as microphone:
                     session = AgentSession(app, speech, config, socket, device, write=write)
+                    if on_ready is not None: on_ready()
                     await session.notice("The call just connected. Please introduce yourself briefly and ask how you can help.")
                     tasks = [asyncio.create_task(session.receive()), asyncio.create_task(session.microphone(microphone)),
                         asyncio.create_task(session.playback.run()), asyncio.create_task(session.idle()), asyncio.create_task(session.stop.wait())]
