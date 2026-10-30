@@ -2,6 +2,8 @@
 import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 import logging
 import os
 import re
@@ -17,6 +19,7 @@ from starlette.datastructures import FormData
 from starlette.websockets import WebSocketState
 from twilio.request_validator import RequestValidator
 from twilio.twiml.voice_response import VoiceResponse, Connect, Stream
+import httpx
 
 from .caller import phone_number
 from .settings import ROOT
@@ -31,6 +34,7 @@ class PhoneConfig:
     auth_token: str = field(repr=False)
     allowed_callers: frozenset = field(default_factory=frozenset, repr=False)
     max_calls: int = 1
+    verify_unsigned_calls: bool = False
 
     def __post_init__(self):
         url = urlsplit(self.public_url)
@@ -49,7 +53,8 @@ class PhoneConfig:
         return cls(os.getenv("PUBLIC_BASE_URL", "").rstrip("/"),
             os.getenv("TWILIO_ACCOUNT_SID", ""), os.getenv("TWILIO_AUTH_TOKEN", ""),
             frozenset(phone_number(value.strip()) for value in callers.split(",") if value.strip()),
-            int(os.getenv("TWILIO_MAX_CALLS", "1")))
+            int(os.getenv("TWILIO_MAX_CALLS", "1")),
+            os.getenv("TWILIO_VERIFY_UNSIGNED_CALLS", "false").casefold() == "true")
 
     @property
     def media_url(self): return "wss://" + urlsplit(self.public_url).netloc + "/media-stream"
@@ -78,6 +83,31 @@ class CallTickets:
         self.pending.pop(token)
         self.active.add(call_sid)
         return row
+
+    def available(self, token):
+        return isinstance(token,str) and token in self.pending and self.pending[token]["expires"] > self.clock()
+
+
+async def verify_live_call(cfg, params):
+    """Alternate proof for an unsigned callback: verify a current call at Twilio.
+
+    The submitted phone and SID are not proof themselves. Only Twilio's
+    authenticated, recent, active inbound record can authorize this path.
+    """
+    try:
+        url = f"https://api.twilio.com/2010-04-01/Accounts/{cfg.account_sid}/Calls/{params['CallSid']}.json"
+        async with httpx.AsyncClient(timeout=5, follow_redirects=False) as client:
+            response = await client.get(url, auth=(cfg.account_sid,cfg.auth_token))
+        if response.status_code != 200: return False
+        row = response.json()
+        age = (datetime.now(timezone.utc)-parsedate_to_datetime(row["date_created"])).total_seconds()
+        return (row.get("account_sid") == cfg.account_sid and row.get("sid") == params["CallSid"]
+            and row.get("direction") == "inbound" and row.get("status") in {"ringing","in-progress"}
+            and row.get("from") == params.get("From") and row.get("to") == params.get("To")
+            and -10 <= age <= 120)
+    except Exception as error:
+        logger.warning("Live call verification unavailable (%s).",type(error).__name__)
+        return False
 
 
 class PhoneRuntime:
@@ -129,7 +159,7 @@ class PhoneRuntime:
             model="deepgram-agent:" + config.provider + "/" + config.model)
         try:
             audit.mode = "phone"
-            audit.event("Transport: signed inbound Twilio Media Stream; synthetic account tools only.")
+            audit.event("Transport: verified inbound Twilio Media Stream; synthetic account tools only.")
             service = AccountTools(self.database) if self.database is not None else None
             caller = CallerSession(service, caller_phone, call_id=audit.call_id, audit=audit, allow_suspended=True)
             services = CustomerServices(service, caller, call_id=audit.call_id,
@@ -146,7 +176,7 @@ class PhoneRuntime:
         if self.client is not None: self.client.close()
 
 
-def create_app(*, config=None, runtime=None, phone_runner=None):
+def create_app(*, config=None, runtime=None, phone_runner=None, call_verifier=None):
     runtime = runtime or PhoneRuntime()
 
     @asynccontextmanager
@@ -187,16 +217,28 @@ def create_app(*, config=None, runtime=None, phone_runner=None):
         try: params = FormData(parse_qsl(body.decode("utf-8"), keep_blank_values=True, max_num_fields=100))
         except (ValueError, UnicodeError): raise HTTPException(400) from None
         signed_url = cfg.public_url.rstrip("/") + "/voice"
-        if request.url.query or not RequestValidator(cfg.auth_token).validate(signed_url, params, request.headers.get("X-Twilio-Signature", "")):
+        signature = request.headers.get("X-Twilio-Signature", "")
+        if request.url.query or (signature and not RequestValidator(cfg.auth_token).validate(signed_url, params, signature)):
+            logger.warning("Phone webhook rejected: invalid_signature.")
             raise HTTPException(403, "Invalid Twilio signature.")
         if params.get("AccountSid") != cfg.account_sid or not re.fullmatch(r"CA[0-9a-fA-F]{32}", params.get("CallSid", "")):
             raise HTTPException(403)
         try: caller = phone_number(params.get("From", ""))
         except ValueError: raise HTTPException(403) from None
         if caller not in cfg.allowed_callers: raise HTTPException(403, "Caller is not enabled for this pilot.")
+        unsigned = not signature
+        if unsigned:
+            if not cfg.verify_unsigned_calls:
+                logger.warning("Phone webhook rejected: missing_signature.")
+                raise HTTPException(403, "Twilio signature is missing.")
+            verifier = call_verifier or verify_live_call
+            if not await verifier(cfg,params):
+                logger.warning("Phone webhook rejected: live_call_not_verified.")
+                raise HTTPException(403, "Could not verify an active inbound call with Twilio.")
+            logger.info("Unsigned callback verified against Twilio's live call record.")
         token = app.state.tickets.issue(params["CallSid"], caller)
         response, connect = VoiceResponse(), Connect()
-        stream = Stream(url=cfg.media_url)
+        stream = Stream(url=cfg.media_url+"/"+token if cfg.verify_unsigned_calls else cfg.media_url)
         stream.parameter(name="session_token", value=token)
         connect.append(stream)
         response.append(connect)
@@ -204,13 +246,17 @@ def create_app(*, config=None, runtime=None, phone_runner=None):
         return Response(str(response), media_type="application/xml")
 
     @app.websocket("/media-stream")
-    async def media(socket: WebSocket):
+    @app.websocket("/media-stream/{ticket}")
+    async def media(socket: WebSocket, ticket: str = ""):
         cfg, call_sid = None, None
         try:
             cfg = settings()
             validator = RequestValidator(cfg.auth_token)
             signature = socket.headers.get("X-Twilio-Signature", "")
-            if socket.url.query or not any(validator.validate(url, {}, signature) for url in (cfg.media_url, cfg.media_url+"/")):
+            media_url = cfg.media_url + ("/"+ticket if ticket else "")
+            signed = bool(signature) and any(validator.validate(url, {}, signature) for url in (media_url,media_url+"/"))
+            verified_ticket = (not signature and cfg.verify_unsigned_calls and app.state.tickets.available(ticket))
+            if socket.url.query or not (signed or verified_ticket):
                 await socket.close(code=1008)
                 return
             await socket.accept()
@@ -224,7 +270,9 @@ def create_app(*, config=None, runtime=None, phone_runner=None):
                     or packet.get("streamSid") != start.get("streamSid")):
                 raise ValueError()
             candidate = start.get("callSid")
-            row = app.state.tickets.consume(start.get("customParameters", {}).get("session_token"), candidate)
+            parameter_token = start.get("customParameters", {}).get("session_token")
+            if ticket and ticket != parameter_token: raise ValueError()
+            row = app.state.tickets.consume(parameter_token, candidate)
             if row is None: raise ValueError()
             call_sid = candidate
             from .phone_audio import run_phone_call

@@ -1,7 +1,8 @@
 import asyncio
 import base64
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, AsyncMock
+from dataclasses import replace
 import xml.etree.ElementTree as ET
 
 import pytest
@@ -12,7 +13,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 from twilio.request_validator import RequestValidator
 
-from telecom_support.phone_server import PhoneConfig, CallTickets, create_app
+from telecom_support.phone_server import PhoneConfig, CallTickets, create_app, verify_live_call
 from telecom_support.phone_audio import TwilioAudio, run_phone_call
 
 ACCOUNT, CALL, STREAM = 'AC'+'1'*32, 'CA'+'2'*32, 'MZ'+'3'*32
@@ -114,6 +115,71 @@ def test_invalid_stream_cannot_release_an_active_call_reservation():
             socket.send_json(start_packet('invalid-token'))
             with pytest.raises(WebSocketDisconnect): socket.receive_json()
         assert CALL in app.state.tickets.active
+
+
+def test_unsigned_call_requires_api_proof_and_single_use_stream_ticket():
+    cfg = replace(config(),verify_unsigned_calls=True)
+    verifier, calls = AsyncMock(return_value=True), []
+    async def runner(socket,start,prepare): calls.append(start['callSid'])
+    app = create_app(config=cfg,runtime=runtime(),phone_runner=runner,call_verifier=verifier)
+    fields=dict(AccountSid=ACCOUNT,CallSid=CALL,From=CALLER,To='+18000000000')
+    with TestClient(app) as client:
+        response = client.post('/voice',data=fields)
+        assert response.status_code == 200
+        verifier.assert_awaited_once()
+        stream = ET.fromstring(response.text).find('Connect/Stream')
+        token = stream.find('Parameter').attrib['value']
+        assert stream.attrib['url'] == cfg.media_url+'/'+token
+        with pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect('/media-stream/invalid-ticket'): pass
+        with client.websocket_connect('/media-stream/'+token) as socket:
+            socket.send_json(dict(event='connected',protocol='Call'))
+            socket.send_json(start_packet(token))
+            with pytest.raises(WebSocketDisconnect): socket.receive_json()
+        assert calls == [CALL]
+        with pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect('/media-stream/'+token): pass
+        # A wrong signature cannot downgrade to the unsigned verification mode.
+        response=client.post('/voice',data=fields,headers={'X-Twilio-Signature':'invalid'})
+        assert response.status_code == 403
+        assert verifier.await_count == 1
+
+
+def test_unsigned_api_verification_failure_never_issues_a_stream():
+    cfg = replace(config(),verify_unsigned_calls=True)
+    app = create_app(config=cfg,runtime=runtime(),call_verifier=AsyncMock(return_value=False))
+    with TestClient(app) as client:
+        response=client.post('/voice',data=dict(AccountSid=ACCOUNT,CallSid=CALL,From=CALLER,To='+18000000000'))
+        assert response.status_code == 403
+        assert not app.state.tickets.pending
+
+
+@pytest.mark.parametrize('changes,expected', [
+    ({},True),({'status':'completed'},False),({'status':'failed'},False),
+    ({'direction':'outbound-api'},False),({'from':'+910000000002'},False),
+    ({'to':'+18000000001'},False),({'account_sid':'AC'+'9'*32},False),
+    ({'sid':'CA'+'9'*32},False),({'date_created':'Fri, 01 Jan 2021 00:00:00 +0000'},False)
+])
+def test_live_call_proof_checks_account_numbers_status_and_freshness(monkeypatch,changes,expected):
+    from datetime import datetime,timezone
+    from email.utils import format_datetime
+    import httpx
+    from telecom_support import phone_server
+    async def run():
+        cfg=config()
+        params=dict(AccountSid=ACCOUNT,CallSid=CALL,From=CALLER,To='+18000000000')
+        row=dict(account_sid=ACCOUNT,sid=CALL,direction='inbound',status='ringing',
+            date_created=format_datetime(datetime.now(timezone.utc)),**{'from':CALLER,'to':params['To']})
+        row.update(changes)
+        fake=AsyncMock()
+        fake.__aenter__.return_value=fake
+        fake.get.return_value=httpx.Response(200,json=row)
+        monkeypatch.setattr(phone_server.httpx,'AsyncClient',Mock(return_value=fake))
+        assert await verify_live_call(cfg,params) is expected
+        url=fake.get.call_args.args[0]
+        assert url.startswith('https://api.twilio.com/')
+        assert fake.get.call_args.kwargs['auth'] == (cfg.account_sid,cfg.auth_token)
+    asyncio.run(run())
 
 
 def test_phone_audio_converts_frames_and_waits_for_actual_playback_mark():

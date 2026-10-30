@@ -47,6 +47,17 @@ caller ID does not authenticate real customer accounts. Add pilot numbers
 deliberately. Continue to use the [service setup](customer-services.md) for saved
 addresses and approved synthetic service-detail sharing.
 
+If your actual inbound callback arrives without `X-Twilio-Signature`, the optional
+`TWILIO_VERIFY_UNSIGNED_CALLS=true` mode verifies the call through Twilio's
+authenticated Calls API instead. It requires a matching account, call SID, caller
+and destination, an active inbound status and creation within 120 seconds.
+Completed or stale calls fail. A present but invalid signature is always rejected;
+the setting does not turn request verification off. The returned WebSocket URL
+contains a short-lived, single-use stream ticket so the stream can also be
+authenticated if its signature header is absent. Treat that temporary URL as
+private; it can appear in local access/inspection logs. Restart after changing
+this setting. Default configuration continues to require signatures.
+
 ## 3. Start the server and tunnel
 
 ```powershell
@@ -123,6 +134,7 @@ retain webhook/media details according to your local/account settings.
 | HTTP 503 configuration | Set the public URL, account SID, auth token and allowed callers |
 | HTTP 503 capacity | Another call or an unexpired 90-second stream reservation occupies the slot |
 | HTTP 403 | Check the exact ngrok origin, Twilio account token and allowed calling number |
+| Missing signature on a genuine inbound call | Inspect the delivery route; optionally use the live-call verification mode described above |
 | Stream opens then closes | Check private server diagnostics, Gemini/Deepgram access and trusted index availability |
 | No or distorted audio | Confirm bidirectional Connect/Stream and mu-law/8 kHz mono start metadata |
 
