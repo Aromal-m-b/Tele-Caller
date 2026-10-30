@@ -22,6 +22,17 @@ contains no official prices, real customer records or payment instructions.
 Existing Anaconda users can keep running `python main.py` in their configured
 environment. The launchers use their own `.venv`; they do not modify Anaconda.
 
+## Try complaints, orders and tracking
+
+Double-click `start-agent.bat` to run the managed Deepgram backend. It supports a
+knowledge-only conversation immediately after setup. To demonstrate confirmed
+complaints, service requests, equipment orders and delivery enquiries, configure
+MongoDB and synthetic caller records using the [service setup](customer-services.md).
+An existing saved address can be reused; the agent asks before submitting a form.
+The [product walkthrough](product-pitch.md#show-it-in-five-minutes) explains what
+to demonstrate, and the [backend comparison](../README.md#choose-the-workflow-you-want-to-demonstrate)
+shows which features belong to each launcher.
+
 ## Set a comfortable pace
 
 The default pause allowance is 1.1 seconds. For a caller who pauses longer to

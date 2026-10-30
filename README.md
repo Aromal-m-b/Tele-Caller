@@ -1,97 +1,141 @@
 # Tele-Caller
 
-**A conversational voice-support pilot for founders and small support teams.**
+**Give your customers someone to talk to. Give your team time to get things done.**
 
-Tele-Caller listens through Deepgram, reasons with Gemini 3.8 Flash, retrieves approved
-knowledge with FAISS, and answers in a natural female voice. It keeps text context,
-handles interruptions, repeats previous answers, and closes a call on request,
-after confirmation, or after an inactivity warning.
+Tele-Caller is a working AI voice-support application for founders and small
+support teams. It listens, answers from approved business knowledge, follows the
+conversation, and turns customer issues into confirmed, trackable requests.
 
-Simulated caller-ID lookup personalizes greetings for registered synthetic callers.
-Guests may verify by username/smartcard for account access and confirmed issue
-tickets, or continue general enquiries without registration. Each call saves a
-private TXT transcript with actual Gemini tokens and estimated API costs.
-See [caller, ticket and logging setup](docs/callers-tickets-logs.md).
+The reference product is **Maya, a Sun Direct-style telecom support assistant**.
+Run a voice demo on your computer today; use it to evaluate the workflows your
+business needs before connecting a real phone line.
 
-The current reference application uses a **Sun Direct / telecom support example**.
-It is a local microphone application, not a hosted multi-tenant SaaS or a public
-telephone line. Adapting to another industry requires approved knowledge, a new
-persona/scope policy and appropriate account tools.
+[Start the demo](docs/quickstart.md) · [Read the product pitch](docs/product-pitch.md)
+· [Explore service workflows](docs/customer-services.md) · [Evaluate costs](docs/business-case.md)
+
+## From a customer question to a useful outcome
+
+Your customer explains the problem in their own words. The agent looks up what it
+needs, keeps the conversation moving, and asks for confirmation before submitting
+a request. Your team receives a structured record instead of having to reconstruct
+the issue from memory.
+
+| What customers need | What Tele-Caller provides | Value for your team |
+| --- | --- | --- |
+| An answer about services or packages | Retrieval from an approved FAISS knowledge base | Less repeated FAQ explanation |
+| Help reporting a problem | Complaint drafts and confirmed MongoDB submission | A recorded issue with a request reference |
+| A visit or connection change | Service booking, new-connection, relocation and cancellation requests | Clear intake for staff to review |
+| Replacement equipment | Equipment order requests linked to delivery records | Consistent item, quantity and destination capture |
+| An order update | Recorded location, holder/courier, ETA and delivery charges when available | Less manual status lookup |
+| A conversation that flows | Streaming speech, spoken replies, interruption handling and text context | Fewer restarts and repeated explanations |
+| A clear end to the call | Requested disconnection and generated inactivity check-ins | Controlled session closure |
+| A record of what happened | Private transcripts, timing and usage/cost estimates | Evidence for review and improvement |
+
+These workflows use synthetic customer data in the current demo. Filing a request
+does not take a payment, dispatch an item, guarantee a visit or change a subscription.
+
+## See the service workflow in a short demo
+
+With the managed backend and synthetic MongoDB setup enabled:
+
+1. Explain a TV signal or recharge-credit problem naturally.
+2. Let the agent prepare a complaint using the issue you described and the saved address.
+3. Hear the summary and approve submission in your own words.
+4. Receive acknowledgement based on the committed database result and request reference.
+5. Ask about an equipment order or delivery, then end the session.
+
+Caller consent is interpreted by a language model, rather than a fixed list of
+accepted confirmation phrases. Local checks control the actual database write.
+The agent speaks naturally; this walkthrough is a demo outline, not a reply script.
+
+[Full demo walkthrough](docs/product-pitch.md#show-it-in-five-minutes)
 
 ## Try it on Windows
 
-1. Download and extract this repository. Install Python 3.10–3.12.
-2. Double-click **setup.bat** and enter your Gemini and Deepgram API keys in `.env`.
-3. Double-click **start.bat**. A small fictional demo index is prepared on first use.
+1. Download this repository using **Code → Download ZIP**, then extract it.
+2. Install Python 3.10–3.12 and connect a microphone and headphones.
+3. Double-click **setup.bat**, enter `GEMINI_API_KEY` and `DEEPGRAM` in `.env`, and save.
+4. Double-click **start.bat** for the standard voice assistant, or **start-agent.bat**
+   for the managed Deepgram Voice Agent.
 
-API usage is billable. Headphones reduce speaker echo. No customer database is
-needed for the demo. Say “please end the call” to finish.
+The first launch prepares a small fictional knowledge index if none exists.
+API usage is billable. A knowledge-only demo needs no customer database.
 
-To try the optional managed Deepgram Voice Agent, run
-`python main.py --backend deepgram-agent` or double-click **start-agent.bat**.
-It uses the same FAISS knowledge base and supports caller-scoped complaints, service
-requests, equipment orders and delivery tracking in MongoDB. General private
-account/payment tools remain in the default backend. See
-[agent setup](docs/deepgram-agent.md) and [service data model](docs/customer-services.md).
+For complaints, service requests, equipment orders and tracking, configure
+MongoDB, a synthetic caller and the approved synthetic-data sharing option as
+explained in the [service setup](docs/customer-services.md). Keep `.env`, customer
+records and transcripts private.
 
-[Owner quickstart](docs/quickstart.md) · [Business case and cost model](docs/business-case.md)
-· [Technical architecture](docs/architecture.md) · [Developer guide](docs/developer-guide.md)
+## Choose the workflow you want to demonstrate
 
-## What a team can evaluate
+| Capability | Standard pipeline: `start.bat` | Managed agent: `start-agent.bat` |
+| --- | --- | --- |
+| Streaming voice and knowledge retrieval | Yes | Yes |
+| Main conversation engine | Gemini text model | Deepgram-managed OpenAI model |
+| Text context and conversational follow-ups | Application-managed history and archive | Managed call conversation; local caller context |
+| Registered caller greeting | Authorized display-name personalization | Generic generated greeting; identity stays local |
+| Private account/subscription tools | Verified local account access | General account/payment tools not exposed |
+| Issue records | Existing confirmed ticket/DOCX workflow | Confirmed MongoDB complaints and service requests |
+| Equipment orders and delivery tracking | Not the managed service workflow | Caller-scoped tools with linked records |
+| Consent interpretation for service submissions | Separate ticket workflow | Gemini semantic interpretation; local commit |
+| Private call logs | Transcript, reported Gemini tokens, estimated usage cost | Transcript, provider timing and connection-based estimate; hosted tokens unavailable |
 
-- Reduce repeated FAQ explanations with answers grounded in approved documents.
-- Keep conversational text context instead of restarting every exchange.
-- Retrieve account and subscription facts through authenticated, read-only tools.
-- Leave callers time to breathe: **1.1-second turn pause**, configurable per business.
-- End idle calls after a **15-second audibility check, 45-second warning and 20-second grace period**.
-- Model operating costs before expanding a supervised pilot.
+No Gemini Live API is used. The managed service combines speech recognition,
+reasoning and speech synthesis over one persistent connection; it also uses Gemini
+for retrieval embeddings and pending-form intent interpretation.
 
-These are capabilities and testable operational hypotheses, not measured profit
-claims. At illustrative usage levels, the supplied model estimates $0.0896 API
-cost/contact; actual spend depends on audio duration, synthesized text, tokens,
-provider rates and retries. The business guide includes fixed costs, human fallback,
-capacity-value scenarios and break-even math.
+## Why this matters to a small business
 
-## Technical path
+Founders should be able to spend less time repeating answers and collecting the
+same issue details. Tele-Caller provides a concrete way to evaluate that:
+
+- Answer documented questions through a voice conversation.
+- Capture customer needs in structured requests for follow-up.
+- Use saved addresses and recorded tracking facts to reduce repetitive questions.
+- Review transcripts and response timing to find friction.
+- Compare operating cost with the staff time actually released.
+
+Savings and customer satisfaction must be measured in a pilot. There is no promised
+profit, call-resolution rate or response-time guarantee. The [business guide](docs/business-case.md)
+provides an adjustable cost model; the [product pitch](docs/product-pitch.md)
+explains the outcomes to measure without assuming vendor prices or a guaranteed ROI.
+
+## Product scope today
+
+This repository delivers a runnable local application, Windows launchers, knowledge
+retrieval, two voice backends, synthetic service workflows and developer documentation.
+It currently handles one local conversation per process through a microphone and
+speaker. Incoming caller identity and disconnection are simulated locally.
+
+A public phone service still requires a SIP/PSTN gateway, trusted customer
+authentication, human handoff, operational monitoring and data-handling controls.
+Multi-business hosting also requires tenant isolation, concurrency and budget controls.
+Changing industry requires adapting the knowledge, persona, scope and data model.
+This project is independent and is not an official Sun Direct service.
+
+## Build and extend
 
 ```text
-Microphone → Deepgram Nova-3 → text dialogue + Gemini 3.8 Flash
-                              ├─ conversational intent and reply
-                              ├─ FAISS retrieval over approved knowledge
-                              └─ authenticated read-only MongoDB tools
-Assistant text → Deepgram Aura-2 Andromeda → speaker
+Customer speech → streaming recognition → conversation + approved knowledge/tools
+                                              ↓
+                           spoken response / confirmed request / private call log
 ```
 
-No Gemini Live API is used. Account/payment database results remain local and use
-safe spoken prompts; separately approved display names are used only for greetings.
-The managed backend can speak approved synthetic service/order/delivery fields
-when its explicit sharing flag is enabled; customer IDs, phone numbers, email and
-profile-name fields stay local.
-Confirmed issue tickets are the narrow write exception to read-only account access.
-Each session keeps six recent text exchanges and a compressed,
-searchable older archive in RAM. Explicit abuse checks precede model/tool access.
-
-## Developer commands
+[Architecture](docs/architecture.md) · [Managed backend](docs/deepgram-agent.md)
+· [Database model](docs/customer-services.md) · [Developer guide](docs/developer-guide.md)
+· [Caller, ticket and logging setup](docs/callers-tickets-logs.md)
 
 ```powershell
 python -m pip install -r requirements-dev.txt
 python -m pytest -q
-python scripts/estimate_costs.py --calls 1000 --containment 0.6
 python main.py --text
-python main.py --speech-pause 2500 --idle-timeout 180 --idle-grace 45
+python main.py --backend deepgram-agent
+python scripts/estimate_costs.py --calls 1000 --containment 0.6
 ```
 
-The tests use synthetic data/mocks and do not need API keys. Optional advanced PDF
-extraction dependencies are in `requirements-pdf.txt`. The repository intentionally
-excludes credentials, database exports, original private/third-party corpora,
-generated FAISS indexes, recordings and old experimental code. The included demo
-knowledge is fictional; it is not official Sun Direct pricing or policy.
+Tests use synthetic fixtures and mocks; they do not require API keys. Optional
+advanced PDF extraction dependencies are in `requirements-pdf.txt`. Credentials,
+private corpora, database exports, generated indexes and call logs are excluded
+from the repository. Included demo policies and prices are fictional.
 
-## Deployment boundary
-
-For real customers, add trusted customer authentication, supervised escalation,
-monitoring, consent/data handling and telephony if needed. Multi-business hosting
-also requires tenant isolation and usage/budget controls. The CLI does not charge
-accounts, renew subscriptions, make outbound phone calls or transfer to a human.
-
-See [LICENSE](LICENSE) for the repository's MIT license.
+Released under the [MIT license](LICENSE).

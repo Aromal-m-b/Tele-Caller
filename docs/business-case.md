@@ -2,8 +2,10 @@
 
 Tele-Caller targets repetitive, documented support questions that consume founders'
 and operators' time. The current deliverable is a local telecom-support pilot. It
-can demonstrate self-service answers, conversational follow-ups and read-only
-account lookup; it does not demonstrate revenue growth or measured labor savings.
+can demonstrate self-service answers, conversational follow-ups, verified local
+account lookup in the standard backend, and confirmed synthetic service/order
+intake in the managed backend. It does not demonstrate revenue growth or measured
+labor savings. See the [product pitch](product-pitch.md) for a customer-facing overview.
 
 ## Where operational value can come from
 
@@ -12,6 +14,8 @@ account lookup; it does not demonstrate revenue growth or measured labor savings
 | Grounded FAQ answers | Fewer repeated explanations by staff | Resolved contacts without a repeat call |
 | Read-only account tools | Less manual navigation for verified customers | Handling time and lookup accuracy |
 | Text session memory | Fewer repeated questions and lost preferences | Repeated-question and correction rate |
+| Confirmed complaint/service intake | Less manual form entry after a call | Staff-accepted requests without missing details |
+| Saved addresses and linked order tracking | Less repeated collection and record navigation | Follow-up time and destination accuracy |
 | Local compressed history | Avoids a separate paid summarization call | Total input/output tokens per contact |
 | Idle disconnect | Limits abandoned-session usage | Idle minutes and abandonment rate |
 | Longer breathing pauses | Less premature turn-taking | Cut-off rate versus response latency |
