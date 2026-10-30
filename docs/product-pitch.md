@@ -19,6 +19,8 @@ The current product demonstrates this using a telecom/DTH business and synthetic
 customers. It is a local application you can run and evaluate, with source code
 you can adapt. An optional [Twilio/ngrok bridge](twilio-phone.md) connects inbound
 pilot calls to the managed agent. It is not a hosted telephone answering service.
+The [LiveKit browser demo](livekit-webrtc.md) provides WebRTC calls to the same
+agent without a telephone account or number.
 
 ## What an owner gets today
 

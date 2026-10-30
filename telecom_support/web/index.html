@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Tele-Caller · Talk to Maya</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/call.css">
+  <script defer src="/static/livekit-client.umd.min.js"></script>
+  <script defer src="/static/call.js"></script>
+</head>
+<body>
+  <header><a class="brand" href="/">◔ <span>Tele-Caller</span></a><span class="badge">WEBRTC VOICE DEMO</span></header>
+  <main>
+    <section class="intro">
+      <p class="eyebrow">A CONVERSATION, WITHOUT THE PHONE LINE</p>
+      <h1>Your voice.<br>A little more help.</h1>
+      <p class="lead">Talk to Maya about your TV service, packages, complaints or equipment requests. Speak naturally, and interrupt whenever you need to.</p>
+      <div class="facts"><span>LiveKit WebRTC</span><span>Deepgram voice agent</span><span>Knowledge &amp; service tools</span></div>
+      <p class="note">This is a synthetic customer demo. Your configured demo account is selected on the server. Requests need confirmation; payments and dispatch are not performed.</p>
+    </section>
+    <section class="call-card" aria-label="Voice call controls">
+      <div class="card-top"><span class="label">MAYA / CUSTOMER SUPPORT</span><span id="connection" class="status">Ready to connect</span></div>
+      <div id="orb" class="orb" aria-hidden="true"><span>m</span></div>
+      <h2>Let’s talk.</h2>
+      <p id="message" role="status" aria-live="polite">Use headphones for a clearer conversation.</p>
+      <label for="code">Demo access code</label>
+      <input id="code" type="password" autocomplete="off" placeholder="WEBRTC_ACCESS_CODE from .env" spellcheck="false">
+      <button id="start" class="primary">Start conversation <span aria-hidden="true">↗</span></button>
+      <div class="secondary-controls"><button id="mute" disabled>Mute microphone</button><button id="end" disabled>End call</button></div>
+      <button id="sound" class="sound" hidden>Enable speaker audio</button>
+      <p class="privacy">Microphone permission is requested when you start. Call transcripts are saved privately on the server. Audio is processed by LiveKit and the configured AI providers.</p>
+    </section>
+  </main>
+  <footer><span>Built for useful conversations.</span><span>No Twilio connection required.</span></footer>
+  <div id="remote-audio" hidden></div>
+</body>
+</html>

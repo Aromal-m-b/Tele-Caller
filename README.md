@@ -61,6 +61,12 @@ The agent speaks naturally; this walkthrough is a demo outline, not a reply scri
 The first launch prepares a small fictional knowledge index if none exists.
 API usage is billable. A knowledge-only demo needs no customer database.
 
+For browser voice through **LiveKit WebRTC**, run `setup-webrtc.bat` once and then
+`start-webrtc.bat`. Open the local or ngrok page and enter the private demo access
+code. This uses the same Deepgram agent over browser audio, with no Twilio number.
+See the [WebRTC guide](docs/livekit-webrtc.md). Use this route to test voice while
+Twilio's trial account blocks Media Streams.
+
 For inbound phone calls through **Twilio + ngrok + Uvicorn**, install
 `requirements-phone.txt` and follow the [phone bridge setup](docs/twilio-phone.md).
 It connects the managed agent to a signed bidirectional telephone audio stream.
@@ -90,6 +96,8 @@ records and transcripts private.
 No Gemini Live API is used. The managed service combines speech recognition,
 reasoning and speech synthesis over one persistent connection; it also uses Gemini
 for retrieval embeddings and pending-form intent interpretation.
+Both the LiveKit browser route and Twilio route reuse this managed backend;
+they change the audio transport, not the reasoning/service tool implementation.
 
 ## Why this matters to a small business
 

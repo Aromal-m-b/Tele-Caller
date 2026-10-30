@@ -1,0 +1,118 @@
+import asyncio
+from dataclasses import replace
+from types import SimpleNamespace
+from unittest.mock import AsyncMock,Mock
+
+import pytest
+pytest.importorskip('livekit.rtc')
+pytest.importorskip('livekit.api')
+from fastapi.testclient import TestClient
+import jwt
+
+from telecom_support.livekit_server import WebRTCConfig,create_app
+from telecom_support.livekit_audio import LiveKitAudio
+
+
+def config():
+    return WebRTCConfig('wss://fixture.example.invalid','fixture-api-key','s'*40,
+        'fixture-private-access-code-1234','+910000000001')
+
+
+def runtime(): return SimpleNamespace(prepare=AsyncMock(),close=Mock())
+
+
+def test_tokens_are_short_lived_scoped_microphone_only_and_anonymous():
+    cfg=config()
+    raw=cfg.token('fixture-room','fixture-caller')
+    claims=jwt.decode(raw,cfg.api_secret,algorithms=['HS256'],issuer=cfg.api_key)
+    assert claims['video']['room']=='fixture-room'
+    assert claims['sub']=='fixture-caller'
+    assert claims['video']['canPublishSources']==['microphone']
+    assert claims['video']['canPublishData'] is False
+    assert not claims['video'].get('roomAdmin')
+    assert claims['exp']-claims['nbf']<=120
+    assert cfg.caller_phone not in str(claims)
+    assert cfg.api_secret not in repr(cfg)
+
+
+def test_browser_api_requires_access_and_cleans_up_isolated_room():
+    cfg,rt,deleted=config(),runtime(),AsyncMock()
+    async def runner(url,token,caller,prepare,stop,update):
+        update('connected')
+        await stop.wait()
+    app=create_app(config=cfg,runtime=rt,runner=runner,delete_room=deleted)
+    headers={'X-Call-Access':cfg.access_code}
+    with TestClient(app) as client:
+        assert client.get('/').status_code==200
+        assert cfg.api_secret not in client.get('/').text
+        assert client.get('/health').json()['backend']=='deepgram-agent'
+        assert client.post('/api/sessions').status_code==401
+        assert client.post('/api/sessions',headers={'X-Call-Access':'wrong'}).status_code==401
+        response=client.post('/api/sessions',headers=headers)
+        assert response.status_code==200
+        body=response.json()
+        assert set(body)=={'session_id','url','token'}
+        assert cfg.caller_phone not in str(body)
+        assert cfg.api_secret not in str(body)
+        assert response.headers['cache-control']=='no-store'
+        assert client.post('/api/sessions',headers=headers).status_code==409
+        sid=body['session_id']
+        assert client.get('/api/sessions/'+sid).status_code==401
+        assert client.get('/api/sessions/'+sid,headers=headers).status_code==200
+        assert client.delete('/api/sessions/'+sid,headers=headers).status_code==200
+        assert client.get('/api/sessions/'+sid,headers=headers).json()['status']=='ended'
+        deleted.assert_awaited_once()
+    rt.close.assert_called_once()
+
+
+@pytest.mark.parametrize('changes',[{'url':'https://example.invalid'},{'api_secret':''},
+    {'access_code':'short'},{'caller_phone':''},{'max_calls':0}])
+def test_invalid_webrtc_configuration_is_rejected(changes):
+    with pytest.raises(ValueError): replace(config(),**changes)
+
+
+def test_livekit_audio_preserves_agent_pcm_and_clears_queued_playback():
+    async def run():
+        source=SimpleNamespace(capture_frame=AsyncMock(),wait_for_playout=AsyncMock(),clear_queue=Mock())
+        audio=LiveKitAudio(source)
+        pcm=b'\0'*960
+        await audio.write(pcm)
+        frame=source.capture_frame.call_args.args[0]
+        assert frame.sample_rate==24000 and frame.num_channels==1
+        assert frame.samples_per_channel==480 and bytes(frame.data)==pcm
+        await audio.drain()
+        source.wait_for_playout.assert_awaited_once()
+        audio.interrupt()
+        source.clear_queue.assert_called_once()
+    asyncio.run(run())
+
+
+def test_livekit_input_is_resampled_to_agent_rate_and_bounded(monkeypatch):
+    from telecom_support import livekit_audio
+    class Stream:
+        def __init__(self,*args,**kwargs):
+            assert kwargs['sample_rate']==16000 and kwargs['num_channels']==1
+            assert kwargs['capacity']==100
+            self.aclose=AsyncMock()
+        def __aiter__(self): return self
+        async def __anext__(self):
+            if getattr(self,'sent',False): raise StopAsyncIteration
+            self.sent=True
+            return SimpleNamespace(frame=SimpleNamespace(data=b'\0'*640))
+    monkeypatch.setattr(livekit_audio.rtc,'AudioStream',Stream)
+    async def run():
+        audio=LiveKitAudio(SimpleNamespace())
+        await audio.ingest(object())
+        assert await audio.read()==b'\0'*640
+        for _ in range(250): audio.queue.put_nowait(b'frame')
+        with pytest.raises(RuntimeError,match='overflowed'): await audio.ingest(object())
+    asyncio.run(run())
+
+
+def test_shutdown_ends_active_session_and_deletes_room():
+    deleted=AsyncMock()
+    async def runner(url,token,caller,prepare,stop,update): await stop.wait()
+    app=create_app(config=config(),runtime=runtime(),runner=runner,delete_room=deleted)
+    with TestClient(app) as client:
+        client.post('/api/sessions',headers={'X-Call-Access':config().access_code})
+    deleted.assert_awaited_once()

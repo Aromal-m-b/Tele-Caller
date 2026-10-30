@@ -24,6 +24,10 @@ environment. The launchers use their own `.venv`; they do not modify Anaconda.
 
 ## Try complaints, orders and tracking
 
+To speak from a browser, use [LiveKit WebRTC](livekit-webrtc.md): `setup-webrtc.bat`,
+then `start-webrtc.bat`, then open the page at `http://127.0.0.1:8000/`. This route
+uses the managed agent and avoids Twilio trial restrictions.
+
 Double-click `start-agent.bat` to run the managed Deepgram backend. It supports a
 knowledge-only conversation immediately after setup. To demonstrate confirmed
 complaints, service requests, equipment orders and delivery enquiries, configure

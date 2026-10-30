@@ -4,6 +4,7 @@ __pycache__/
 .pytest_cache/
 tmp/
 .venv/
+.venv-livekit/
 data/
 *.backup/
 .idea/
