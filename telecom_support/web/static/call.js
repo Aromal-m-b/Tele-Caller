@@ -17,7 +17,7 @@
     $('end').setAttribute('aria-label',next === 'connected' ? 'End call' : 'Cancel call');
   }
   async function request(path, access, options = {}) {
-    const response = await fetch(path,{...options,headers:{'X-Call-Access':access},cache:'no-store'});
+    const response = await fetch(path,{...options,headers:{'X-Call-Access':access,'ngrok-skip-browser-warning':'1'},cache:'no-store'});
     let body;
     try { body = await response.json(); } catch (_) { throw new Error('The server did not return a session response. Check that the WebRTC server is running.'); }
     if (!response.ok) throw new Error(typeof body.detail === 'string' ? body.detail : 'The call request failed.');
@@ -183,6 +183,6 @@
   window.addEventListener('pagehide',() => {
     if (!active) return;
     if (active.mic) active.mic.stop();
-    if (active.session) fetch('/api/sessions/' + encodeURIComponent(active.session.session_id),{method:'DELETE',headers:{'X-Call-Access':active.access},keepalive:true}).catch(() => {});
+    if (active.session) fetch('/api/sessions/' + encodeURIComponent(active.session.session_id),{method:'DELETE',headers:{'X-Call-Access':active.access,'ngrok-skip-browser-warning':'1'},keepalive:true}).catch(() => {});
   });
 })();

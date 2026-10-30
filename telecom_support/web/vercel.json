@@ -1,0 +1,27 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "",
+  "installCommand": "",
+  "outputDirectory": ".",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://supper-rinsing-mop.ngrok-free.dev/api/:path*"
+    },
+    {
+      "source": "/health",
+      "destination": "https://supper-rinsing-mop.ngrok-free.dev/health"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/:path*",
+      "headers": [{"key": "Cache-Control", "value": "no-store"}]
+    },
+    {
+      "source": "/",
+      "headers": [{"key": "Cache-Control", "value": "no-store"}]
+    }
+  ]
+}

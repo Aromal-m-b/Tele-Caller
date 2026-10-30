@@ -66,6 +66,9 @@ For browser voice through **LiveKit WebRTC**, run `setup-webrtc.bat` once and th
 code. This uses the same Deepgram agent over browser audio, with no Twilio number.
 The phone-style page includes a keypad, microphone permission/retry screen,
 ringing, connected call timer and hang-up controls.
+[Vercel deployment guide](docs/vercel-deployment.md): host the static dialer on
+Vercel and forward its session API to the persistent backend; no provider keys
+belong in the browser deployment.
 See the [WebRTC guide](docs/livekit-webrtc.md). Use this route to test voice while
 Twilio's trial account blocks Media Streams.
 
