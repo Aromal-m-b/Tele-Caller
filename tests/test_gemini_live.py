@@ -1,4 +1,5 @@
 import asyncio
+import pytest
 from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock, Mock
 
@@ -12,14 +13,15 @@ def test_setup_uses_audio_transcripts_and_only_scoped_read_tools():
     assert parsed.response_modalities == [types.Modality.AUDIO]
     assert parsed.input_audio_transcription is not None
     assert parsed.output_audio_transcription is not None
-    assert [f.name for f in parsed.tools[0].function_declarations] == ['end_call','diagnose_channel_access']
+    assert [f.name for f in parsed.tools[0].function_declarations] == ['end_call','diagnose_channel_access','get_subscription_summary']
     assert 'fixture-secret' not in repr(config)
     assert 'Malayalam' in parsed.system_instruction
     declaration = config.setup()['tools'][0]['function_declarations'][1]
     assert set(declaration['parameters'])=={'type','properties','required'}
 
 
-def test_persistent_receive_streams_audio_interrupts_and_closes(monkeypatch):
+@pytest.mark.parametrize('tool_name',['diagnose_channel_access','get_subscription_summary'])
+def test_persistent_receive_streams_audio_interrupts_and_closes(monkeypatch,tool_name):
     class Context:
         async def __aenter__(self): return self
         async def __aexit__(self,*args): pass
@@ -40,13 +42,13 @@ def test_persistent_receive_streams_audio_interrupts_and_closes(monkeypatch):
             self.send_tool_response = AsyncMock(side_effect=self.result)
         async def result(self, **kwargs):
             response = kwargs['function_responses'][0]
-            if response.name=='diagnose_channel_access':
+            if response.name==tool_name:
                 self.lookup_received = response.response
         async def receive(self):
             self.turn += 1
             if self.turn == 1:
                 yield types.LiveServerMessage(tool_call=types.LiveServerToolCall(function_calls=[
-                    types.FunctionCall(id='lookup-1',name='diagnose_channel_access',args={'channel':'Sports'})]))
+                    types.FunctionCall(id='lookup-1',name=tool_name,args={'channel':'Sports'} if tool_name=='diagnose_channel_access' else {})]))
                 while self.lookup_received is None: await asyncio.sleep(0.001)
                 yield types.LiveServerMessage(server_content=types.LiveServerContent(
                     interrupted=True,input_transcription=types.Transcription(text='ഹലോ')))
@@ -62,7 +64,7 @@ def test_persistent_receive_streams_audio_interrupts_and_closes(monkeypatch):
     close = AsyncMock()
     account = object()
     lookup = Mock(return_value={'ok':True,'state':'already_entitled'})
-    monkeypatch.setattr('telecom_support.gemini_live.channel_execute',lookup)
+    monkeypatch.setattr('telecom_support.gemini_live.'+('channel_execute' if tool_name=='diagnose_channel_access' else 'summary_execute'),lookup)
     monkeypatch.setattr('telecom_support.gemini_live.genai.Client',lambda **kwargs:NS(
         aio=NS(live=NS(connect=lambda **kwargs:session),aclose=close)))
     logged=[]
@@ -72,7 +74,7 @@ def test_persistent_receive_streams_audio_interrupts_and_closes(monkeypatch):
     assert audio.interrupted == 1
     audio.write.assert_awaited()
     assert session.send_tool_response.await_count == 2
-    lookup.assert_called_once_with(account,{'channel':'Sports'})
+    lookup.assert_called_once_with(account,{'channel':'Sports'} if tool_name=='diagnose_channel_access' else {})
     assert session.lookup_received['state']=='already_entitled'
     close.assert_awaited_once()
     assert any('ഹലോ' in line for line in logged)

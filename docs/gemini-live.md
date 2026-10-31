@@ -6,7 +6,9 @@ Vercel/ngrok routes. No frontend changes or Vercel secrets are needed.
 
 This backend now includes a read-only MongoDB channel-access tool bound to the
 configured synthetic caller number. It checks active subscriptions, individual
-add-ons and catalog alternatives. It does not include complaint/order tools or FAISS.
+add-ons and catalog alternatives. A compact subscription-summary tool provides
+plan names, counts and paginated language/genre/HD/SD channel drill-down. It does
+not include complaint/order tools or FAISS.
 It cannot quote verified official prices or submit requests. Keep using
 `start-webrtc.bat` for the existing Deepgram customer-service implementation.
 

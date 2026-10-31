@@ -153,3 +153,46 @@ def test_legacy_alias_resolves_entitlements_and_unmapped_legacy_is_not_sold(acco
     account.db.channels.update_one({'channel_id':'OLD'},{'$unset':{'canonical_channel_id':''}})
     result=execute(account,{'channel':'Old Movie Label'})
     assert result['state']=='legacy_channel_needs_clarification' and 'options' not in result
+
+
+def test_subscription_summary_is_compact_private_and_filters_with_pagination(account):
+    from telecom_support.subscription_summary import execute as overview
+    account.db.channels.update_one({'channel_id':'1'},{'$set':{'language':'Malayalam','genre':'Movies','is_hd':False}})
+    account.db.subscription_channels.insert_many([
+        dict(subscription_id='S1',channel_id='3',activated_on='2026-10-01',status='Active'),
+        dict(subscription_id='S1',channel_id='4',activated_on='2026-10-01',status='Active')])
+    result=overview(account,{})
+    assert result['total_eligible_channels']==3 and 'channels' not in result
+    assert result['active_plans'][0]['package_name']=='Movies'
+    assert result['breakdown']['language']=={'Malayalam':1,'Unspecified':2}
+    assert result['breakdown']['quality']=={'SD':1,'Unspecified':2}
+    assert result['breakdown']['channel_type']=={'Free':1,'Paid':2}
+    assert all(value not in str(result) for value in ['private-number','private-email','customer_id','subscription_id'])
+    filtered=overview(account,dict(language='malayalam',genre='Movies',quality='SD',channel_type='Paid',include_channels=True))
+    assert filtered['matching_channels']==1 and filtered['channels'][0]['channel_name']=='Movie SD'
+    first=overview(account,dict(include_channels=True,limit=2))
+    second=overview(account,dict(include_channels=True,limit=2,offset=first['next_offset']))
+    assert len(first['channels'])==2 and len(second['channels'])==1
+    assert second['next_offset'] is None
+
+
+def test_summary_no_plan_or_expired_plan_never_invents_active_subscription(account):
+    from telecom_support.subscription_summary import execute as overview
+    account.db.subscriptions.update_one({}, {'$set':{'expiry_date':'2026-10-30'}})
+    result=overview(account,{})
+    assert result['total_eligible_channels']==0 and result['state']=='no_current_subscription'
+    assert result['noncurrent_plans'][0]['channel_count']==1
+    account.db.subscriptions.delete_many({})
+    result=overview(account,{})
+    assert result['active_plans']==[] and result['noncurrent_plans']==[] and result['total_eligible_channels']==0
+
+
+def test_summary_multiple_plans_deduplicate_and_reject_identity_or_bad_limits(account):
+    from telecom_support.subscription_summary import execute as overview
+    account.db.subscriptions.insert_one(dict(subscription_id='S2',customer_id='C1',bouquet_id='B1',
+        start_date='2026-10-01',expiry_date='2026-10-31',subscription_status='Active'))
+    assert overview(account,{})['total_eligible_channels']==1
+    for args in [{'customer_id':'C2'},{'limit':1000},{'offset':-1},{'include_channels':'yes'}]:
+        with pytest.raises(ValidationError): overview(account,args)
+    account.identity=None
+    with pytest.raises(ToolError): overview(account,{})

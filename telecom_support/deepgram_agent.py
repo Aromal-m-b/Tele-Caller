@@ -18,6 +18,7 @@ from .speech_output import SpeakerDevice
 from .customer_services import DEFINITIONS as SERVICE_DEFINITIONS, submission_question, tool_definitions
 from .account_tools import ToolError
 from .channel_support import SALES_GUIDANCE
+from .subscription_summary import GUIDANCE as SUMMARY_GUIDANCE
 
 AGENT_URL = "wss://agent.deepgram.com/v1/agent/converse"
 PROMPT = """You are Maya, Tech Five's virtual customer support assistant on one
@@ -120,7 +121,7 @@ def agent_settings(speech, config, *, service_tools=False, recognized_caller=Fal
                      "defer_until_eot": True,
                      "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}]},
             "speak": {"provider": {"type": "deepgram", "model": speech.tts_model}}}}
-    payload["agent"]["think"]["prompt"] += "\n" + SALES_GUIDANCE
+    payload["agent"]["think"]["prompt"] += "\n" + SALES_GUIDANCE + "\n" + SUMMARY_GUIDANCE
     if service_tools:
         payload["agent"]["think"]["functions"].extend(tool_definitions())
         payload["agent"]["think"]["prompt"] += ("\nClient binding: recognized synthetic caller; service tools can use the bound identity. Do not ask for their name, phone or smartcard."

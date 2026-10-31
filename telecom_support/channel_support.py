@@ -62,7 +62,7 @@ def active_period(row, now, *, start="start_date", end="expiry_date"):
     return begun and not expired
 
 
-def diagnose(account, channel):
+def diagnose(account, channel=None):
     """Return an allowlisted view: identity and contact fields never leave Python."""
     customer = account._customer()
     now = account.now()
@@ -71,24 +71,26 @@ def diagnose(account, channel):
     if len(set(ids))!=len(ids) or None in ids:
         raise ToolError("BROKEN_CHANNEL_MAPPING", "Channel catalog has missing or duplicate identifiers.")
     by_id = {r["channel_id"]:r for r in catalog}
-    normalize = lambda value: " ".join(re.sub(r"[^\w]+", " ", str(value).casefold()).split())
-    exact_id = [r for r in catalog if str(r["channel_id"])==channel]
-    matches = exact_id or [r for r in catalog if normalize(r.get("channel_name",""))==normalize(channel)]
-    if len(matches)!=1:
-        candidates = matches or [r for r in catalog if normalize(channel) in normalize(r.get("channel_name",""))]
-        return {"ok":True,"state":"channel_ambiguous" if candidates else "channel_not_found",
-            "candidates":[{"channel_id":r["channel_id"],"channel_name":r["channel_name"],
-                           "is_hd":truth(r.get("is_hd"))} for r in candidates[:10]],
-            "instruction":"Ask the caller for the exact channel/version. Do not infer lack of subscription."}
-    requested = matches[0]
-    if requested.get('canonical_channel_id'):
-        target=by_id.get(requested['canonical_channel_id'])
-        if not target or truth(target.get('is_hd'))!=truth(requested.get('is_hd')):
-            raise ToolError('BROKEN_CHANNEL_MAPPING','A legacy channel alias requires catalog correction.')
-        requested=target
-    elif requested.get('catalog_reference_status')=='LEGACY_NOT_IN_IMPORTED_SOURCE':
-        return {'ok':True,'state':'legacy_channel_needs_clarification',
-            'instruction':'This old channel label is not in the imported source. Ask for the exact current channel name and SD/HD version before giving eligibility advice. Do not sell a recharge for this unverified legacy entry.'}
+    requested = {'channel_id':None}
+    if channel is not None:
+        normalize = lambda value: " ".join(re.sub(r"[^\w]+", " ", str(value).casefold()).split())
+        exact_id = [r for r in catalog if str(r["channel_id"])==channel]
+        matches = exact_id or [r for r in catalog if normalize(r.get("channel_name",""))==normalize(channel)]
+        if len(matches)!=1:
+            candidates = matches or [r for r in catalog if normalize(channel) in normalize(r.get("channel_name",""))]
+            return {"ok":True,"state":"channel_ambiguous" if candidates else "channel_not_found",
+                "candidates":[{"channel_id":r["channel_id"],"channel_name":r["channel_name"],
+                               "is_hd":truth(r.get("is_hd"))} for r in candidates[:10]],
+                "instruction":"Ask the caller for the exact channel/version. Do not infer lack of subscription."}
+        requested = matches[0]
+        if requested.get('canonical_channel_id'):
+            target=by_id.get(requested['canonical_channel_id'])
+            if not target or truth(target.get('is_hd'))!=truth(requested.get('is_hd')):
+                raise ToolError('BROKEN_CHANNEL_MAPPING','A legacy channel alias requires catalog correction.')
+            requested=target
+        elif requested.get('catalog_reference_status')=='LEGACY_NOT_IN_IMPORTED_SOURCE':
+            return {'ok':True,'state':'legacy_channel_needs_clarification',
+                'instruction':'This old channel label is not in the imported source. Ask for the exact current channel name and SD/HD version before giving eligibility advice. Do not sell a recharge for this unverified legacy entry.'}
     bouquets = bounded(account.db.bouquets,{})
     packages = {}
     for row in bouquets:
@@ -110,6 +112,7 @@ def diagnose(account, channel):
     account_active = str(customer.get("account_status","")).casefold()=="active"
     eligible, active_plans, inactive_plans = set(), [], []
     inactive_addon_match = False
+    all_inactive = []
     for row in subscriptions:
         bid = row.get("bouquet_id")
         if bid is not None and bid not in packages:
@@ -132,12 +135,19 @@ def diagnose(account, channel):
             elif cid == requested["channel_id"]:
                 inactive_addon_match = True
         included = {cid for cid in parent_channels|addon_ids if truth(by_id[cid].get("is_active"))}
+        view['channel_ids']=sorted(included)
+        view['is_currently_valid']=valid
         if valid:
             eligible.update(included)
             view["channel_ids"] = sorted(included)
             active_plans.append(view)
-        elif requested["channel_id"] in parent_channels|addon_ids:
-            inactive_plans.append(view)
+        else:
+            all_inactive.append(view)
+            if requested["channel_id"] in parent_channels|addon_ids:
+                inactive_plans.append(view)
+    if channel is None:
+        return dict(catalog=by_id,eligible=eligible,active=active_plans,inactive=all_inactive,
+                    account_active=account_active,checked_at=now.isoformat())
     cid = requested["channel_id"]
     entitled = cid in eligible
     reason = ("channel_unavailable" if not truth(requested.get("is_active")) else

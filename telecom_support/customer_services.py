@@ -16,6 +16,7 @@ from .account_tools import ToolError
 from .service_schema import mongo_transaction
 from .addresses import customer_address, format_address
 from .channel_support import ChannelArgs, DESCRIPTION as CHANNEL_DESCRIPTION, execute as channel_execute
+from .subscription_summary import SummaryArgs, DESCRIPTION as SUMMARY_DESCRIPTION, execute as summary_execute
 
 PRODUCTS = {"DISH": "Satellite dish", "SET_TOP_BOX": "Set-top box", "COAXIAL_CABLE": "Coaxial cable",
     "DUPLICATE_SMARTCARD": "Duplicate smartcard", "REMOTE": "Remote control", "CONNECTOR": "Cable connector",
@@ -81,6 +82,7 @@ class DeliveryLookup(StrictArgs):
 
 
 DEFINITIONS = {
+    "get_subscription_summary": (SummaryArgs, SUMMARY_DESCRIPTION),
     "diagnose_channel_access": (ChannelArgs, CHANNEL_DESCRIPTION),
     "get_service_context": (StrictArgs, "Check locally whether the caller number matches a synthetic customer. Never ask for a customer ID or phone number."),
     "draft_complaint": (ComplaintArgs, "Prepare a complaint form: missing payment, no signal, technician misconduct, support, billing or pricing. Draft only; ask for explicit submission confirmation."),
@@ -156,6 +158,8 @@ class CustomerServices:
             if name.startswith("draft_"):
                 return self.draft(name, args)
             customer = self.customer()
+            if name == "get_subscription_summary":
+                return summary_execute(self.account,args)
             if name == "diagnose_channel_access":
                 return channel_execute(self.account, args)
             base = {"customer_id": customer["customer_id"], "data_type": "SYNTHETIC"}

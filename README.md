@@ -174,3 +174,6 @@ individual-channel and package options without making a payment or changing plan
 
 [Import channel tables from HTML](docs/channel-import.md) while preserving original
 TD values, source metadata and existing package/subscription channel links.
+
+[Subscription summaries](docs/subscription-summary.md) give callers their actual
+plan names and channel counts, with language, genre and HD/SD drill-down on request.
