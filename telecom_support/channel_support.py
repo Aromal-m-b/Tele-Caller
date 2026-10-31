@@ -81,6 +81,14 @@ def diagnose(account, channel):
                            "is_hd":truth(r.get("is_hd"))} for r in candidates[:10]],
             "instruction":"Ask the caller for the exact channel/version. Do not infer lack of subscription."}
     requested = matches[0]
+    if requested.get('canonical_channel_id'):
+        target=by_id.get(requested['canonical_channel_id'])
+        if not target or truth(target.get('is_hd'))!=truth(requested.get('is_hd')):
+            raise ToolError('BROKEN_CHANNEL_MAPPING','A legacy channel alias requires catalog correction.')
+        requested=target
+    elif requested.get('catalog_reference_status')=='LEGACY_NOT_IN_IMPORTED_SOURCE':
+        return {'ok':True,'state':'legacy_channel_needs_clarification',
+            'instruction':'This old channel label is not in the imported source. Ask for the exact current channel name and SD/HD version before giving eligibility advice. Do not sell a recharge for this unverified legacy entry.'}
     bouquets = bounded(account.db.bouquets,{})
     packages = {}
     for row in bouquets:

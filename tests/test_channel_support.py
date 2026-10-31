@@ -142,3 +142,14 @@ def test_imported_price_without_period_is_not_quoted_as_monthly(account):
     # Catalog joins must also tolerate the source's unknown billing period.
     channels=account._channels('B2')
     assert next(r for r in channels if r['channel_id']=='4')['monthly_price_inr'] is None
+
+
+def test_legacy_alias_resolves_entitlements_and_unmapped_legacy_is_not_sold(account):
+    account.db.channels.insert_one(dict(channel_id='OLD',channel_name='Old Movie Label',is_hd=False,
+        canonical_channel_id='1',catalog_reference_status='LEGACY_NOT_IN_IMPORTED_SOURCE'))
+    result=execute(account,{'channel':'Old Movie Label'})
+    assert result['entitled'] and result['requested_channel']['channel_id']=='1'
+    assert result['options']==[]
+    account.db.channels.update_one({'channel_id':'OLD'},{'$unset':{'canonical_channel_id':''}})
+    result=execute(account,{'channel':'Old Movie Label'})
+    assert result['state']=='legacy_channel_needs_clarification' and 'options' not in result

@@ -153,6 +153,14 @@ The `channel_id` field now has a unique index.
 
 This collection implements a many-to-many relationship.
 
+**Synthetic rebuild, October 31, 2026:** the 12 existing demo bouquets now use
+488 links derived from the imported HTML sections. Each link includes
+`membership_basis: SYNTHETIC_SECTION_BASED_NOT_OFFICIAL` and `source_sha256`.
+Bouquets include `membership_rule`, `membership_basis` and
+`channel_catalog_revision`. These contents are generated demo rules, not official
+provider package definitions. Prices remain the original illustrative fixtures.
+See [membership rules](docs/membership-rebuild.md).
+
 ### 2.5 subscriptions
 
 **Purpose:** Stores the customer's current or historical subscription records.
@@ -167,6 +175,8 @@ This collection implements a many-to-many relationship.
 | `subscription_status` | String | Active / Expired |
 | `auto_renew` | Boolean | Auto-renewal preference |
 | `billing_cycle` | String | Monthly |
+| `channel_catalog_revision` | String optional | Imported catalog SHA-256 used by the current synthetic membership rebuild |
+| `channel_membership_basis` | String optional | `SYNTHETIC_SECTION_BASED_NOT_OFFICIAL`; does not change dates or status |
 
 **Primary Key:** `subscription_id`
 
@@ -186,6 +196,14 @@ This collection implements a many-to-many relationship.
 | `status` | String | Active / Expired |
 
 **Composite Unique Key:** (`subscription_id`, `channel_id`)
+
+The rebuild retains all 25 add-ons, remapping two reviewed synthetic aliases to
+their imported SD channel IDs. Changed rows include `catalog_migration` with the
+previous channel ID/name, replacement name, synthetic basis and source hash.
+Activation dates and statuses are unchanged. Channel rows kept only for history
+have `catalog_reference_status: LEGACY_NOT_IN_IMPORTED_SOURCE`; reviewed aliases
+also have `canonical_channel_id`. All rebuilt package and add-on links reference
+the 254 imported source records.
 
 ### 2.7 payments
 

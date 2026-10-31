@@ -58,3 +58,8 @@ included in its returned view. Deepgram retains the existing
 scoped channel view. Unknown callers and failed reads never fall back to another
 customer or a guessed entitlement. Duplicate identifiers, broken mappings,
 invalid prices and excessive result sets fail closed.
+
+The [synthetic membership rebuild](membership-rebuild.md) replaces the original
+demo package contents with explicitly documented HTML-section rules. It also
+resolves reviewed legacy aliases to canonical imported channels. Historical
+labels without an approved mapping require clarification and are not sold.
