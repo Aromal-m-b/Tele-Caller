@@ -10,7 +10,7 @@ import threading
 import time
 import unicodedata
 
-REFUSAL = "Sorry, that's outside what I can help with here. I'm here for Sun Direct support."
+REFUSAL = "Sorry, that's outside what I can help with here. I'm here for Tech Five support."
 CLARIFICATION = "I didn't quite catch what you need. Could you say a little more?"
 
 
@@ -75,14 +75,14 @@ _OTHER_TASK = re.compile(
     r"\b(?:build|design|create)\b.{0,50}\b(?:website|web app|application|chatbot)\b|"
     r"\b(?:base64|rot13|hex.encoded|encrypted instructions)\b", re.I)
 _DOMAIN = re.compile(
-    r"\b(?:sun\s*direct|sundirect|dth|dish|set.top.box|stb|receiver|remote|television|tv|"
+    r"\b(?:tech\s*five|techfive|sun\s*direct|sundirect|dth|dish|set.top.box|stb|receiver|remote|television|tv|"
     r"recharg\w*|reche?rg\w*|subscription|subscrib\w*|bouquet|pack(?:age)?s?|plans?|"
     r"channels?|payment|paid|billing|bill|balance|refund|validity|expir\w*|renew\w*|"
     r"tickets?|issues?|verify|verification|distributor|dealership|dealer|partnership|new customer|business enquiry|"
     r"complaints?|orders?|deliver(?:y|ies)|tracking|courier|relocation|relocating|cancelling|cancellation|dish|remote|wire|adapter|connector|"
     r"account|profile|registered mobile|smart.?card|cdsn|cr.?id|customer.?id|"
     r"signal|cable|picture|screen|error|complaint|technician|installation|"
-    r"movies|entertainment|sports|shopping|ott|sun nxt|sun direct go|login|otp|"
+    r"movies|entertainment|sports|shopping|ott|sun nxt|tech five go|login|otp|"
     r"(?:reset|recover|forgot|change).{0,20}password|password reset)\b", re.I)
 _LANGUAGE = re.compile(r"\b(?:malayalam|tamil|telugu|kannada|hindi|bengali|marathi|odia|english)\b", re.I)
 _FOLLOWUP = re.compile(
@@ -112,10 +112,10 @@ class SupportScopeGuard:
 
     def evaluate(self, text, *, context=""):
         if len(text) > 4000:
-            return ScopeDecision(False, "request_too_long", "Please keep your request to a short Sun Direct service question.")
+            return ScopeDecision(False, "request_too_long", "Please keep your request to a short Tech Five service question.")
         value = normalize(text)
         if len(value) > 4000:
-            return ScopeDecision(False, "request_too_long", "Please keep your request to a short Sun Direct service question.")
+            return ScopeDecision(False, "request_too_long", "Please keep your request to a short Tech Five service question.")
         # Collapsed forms catch obvious whitespace/zero-width obfuscation without
         # rewriting the customer request that eventually reaches the assistant.
         collapsed = re.sub(r"[^a-z0-9]", "", value)

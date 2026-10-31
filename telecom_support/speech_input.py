@@ -276,7 +276,7 @@ async def process_turns(application, turns, *, write=print, clock=time.monotonic
             write("You: " + turn.text)
             action = control.decide(turn.text, started_at=turn.started_at)
             if action == "end":
-                await call_event("goodbye", "Thanks for calling Sun Direct. Goodbye!", ending=True)
+                await call_event("goodbye", "Thanks for calling Tech Five. Goodbye!", ending=True)
                 return
             if presence_prompt:
                 presence_prompt = False
@@ -510,7 +510,7 @@ async def _microphone_session(application, settings, *, microphone_factory=Micro
                             write=write, audit=getattr(application, "audit", None), clock=clock)
                         token = active_turn.set(timing)
                         try:
-                            farewell = await generated_call_message(application, "goodbye", "Thanks for calling Sun Direct. Goodbye!")
+                            farewell = await generated_call_message(application, "goodbye", "Thanks for calling Tech Five. Goodbye!")
                             write("A: " + farewell)
                             if speaker is not None:
                                 from .speech_output import SpeechOutputError

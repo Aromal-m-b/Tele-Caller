@@ -12,7 +12,7 @@ guard is used by the separate voice-agent prototype and by direct tool-agent cal
 2. Reject programming, code generation, unrelated task categories, instruction
    overrides, backend-secret requests, raw database operations and bulk customer
    extraction. Explicit disallowed tasks take precedence over support keywords,
-   so adding "Sun Direct" to a coding request does not authorize it.
+   so adding "Tech Five" to a coding request does not authorize it.
 3. Admit supported TV/account/recharge topics and contextual service follow-ups.
    Conversational asides, identity, greetings and ambiguous fragments use a constrained
    Gemini conversational path, explicitly authorized for text dialogue. That path

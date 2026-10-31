@@ -46,7 +46,7 @@ socket receiving and audio playback. Cancelled calls never send late results;
 uninterruptible embedding reads finish during cleanup. At most two lookups run
 concurrently, with bounded outstanding calls and a per-session rate limit.
 
-The prompt retains the Sun Direct support scope. Local guards restrict retrieval
+The prompt retains the Tech Five support scope. Local guards restrict retrieval
 and screen returned assistant text before allowing its audio. Unlike the custom
 pipeline, cloud input reaches the managed agent before the local client receives
 its transcript, so the client cannot enforce a pre-LLM input guard. Incremental
@@ -65,7 +65,7 @@ General private account/payment lookup, username/smartcard verification and the
 older DOCX ticket flow remain in `--backend pipeline`. The managed agent uses only
 its declared FAISS, call-control and service tools; retrieved documents are data,
 not instructions. The example shop return/shipping/pricing strings from the
-pseudocode are not installed as Sun Direct knowledge.
+pseudocode are not installed as Tech Five knowledge.
 
 ## Playback, interruption and hang-up
 

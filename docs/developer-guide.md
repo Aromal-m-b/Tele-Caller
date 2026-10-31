@@ -32,7 +32,7 @@ Anaconda environment can instead run `python main.py` directly.
 
 `python scripts/prepare_demo.py` builds a fictional demonstration index from
 `examples/knowledge/`. It calls the embedding API once and preserves any existing
-index. The demo is not official Sun Direct policy, packages or pricing.
+index. The demo is not official Tech Five policy, packages or pricing.
 
 For approved PDFs, create a local directory containing only the PDFs to ingest:
 

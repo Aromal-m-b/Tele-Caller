@@ -70,7 +70,7 @@ without first presenting the package is rejected.
 | `recommend_plan` | Packages meeting language, genre, exclusion and budget requirements |
 
 The dataset is explicitly synthetic and catalog prices are illustrative, not live
-Sun Direct tariffs. Package recommendations use `bouquet_channels` membership,
+Tech Five tariffs. Package recommendations use `bouquet_channels` membership,
 not guesses based on independent channel records. Genre exclusions are checked
 against every channel in a package. Required genres must all be represented among
 the requested language's active channels.

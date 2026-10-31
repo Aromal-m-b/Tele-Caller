@@ -270,7 +270,7 @@ def test_full_agent_bridge_drains_goodbye_then_ends_without_a_microphone():
                 if isinstance(message,bytes): return
                 packet = json.loads(message)
                 if packet['type'] == 'InjectUserMessage':
-                    await provider.put(json.dumps(dict(type='ConversationText',role='assistant',content="Hi, I'm Maya from Sun Direct.")))
+                    await provider.put(json.dumps(dict(type='ConversationText',role='assistant',content="Hi, I'm Maya from Tech Five.")))
                     await provider.put(b'\0'*960)
                     await provider.put(json.dumps(dict(type='AgentAudioDone')))
         async def receive_json(): return await inbound.get()
@@ -281,7 +281,7 @@ def test_full_agent_bridge_drains_goodbye_then_ends_without_a_microphone():
                 if sum(item['event']=='mark' for item in sent) == 1:
                     for event in [dict(type='UserStartedSpeaking'),
                         dict(type='ConversationText',role='user',content='Please end the call.'),
-                        dict(type='ConversationText',role='assistant',content='Thank you for calling Sun Direct. Goodbye!')]:
+                        dict(type='ConversationText',role='assistant',content='Thank you for calling Tech Five. Goodbye!')]:
                         await provider.put(json.dumps(event))
                     await provider.put(b'\0'*960)
                     await provider.put(json.dumps(dict(type='AgentAudioDone')))

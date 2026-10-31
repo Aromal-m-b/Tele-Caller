@@ -136,7 +136,7 @@ def render_result(name, result):
     elif name == "confirm_recharge_choice":
         body = (f"You confirmed {result['selection_confirmed']['bouquet_name']} ({result['selection_confirmed']['bouquet_id']}) from your previous recharge. "
                 "This confirms your choice only. No payment, renewal or subscription change has been made. "
-                "Use the official Sun Direct recharge process to proceed.")
+                "Use the official Tech Five recharge process to proceed.")
     elif name == "get_payment_history":
         body = "Your recent payments:\n" + "\n".join(
             f"{row['payment_id']}: INR {row['amount_inr']}, {row['payment_date']}, {row['payment_method']}, {row['payment_status']}"

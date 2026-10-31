@@ -41,7 +41,7 @@ def test_connected_assistant_speaks_generated_opening_before_any_user_turn():
                 greeted.set()
         def opening():
             assert connected == ["socket", "mic"]
-            return "Hi, I'm Maya from Sun Direct. How can I help?"
+            return "Hi, I'm Maya from Tech Five. How can I help?"
         app = SimpleNamespace(start_conversation=Mock(side_effect=opening), generate=Mock())
         await run_microphone(app, SpeechSettings("fake", audio_output=True),
             speaker_factory=lambda _: Speaker(), microphone_factory=lambda **k: Mic(),

@@ -6,7 +6,7 @@ Tele-Caller is a working AI voice-support application for founders and small
 support teams. It listens, answers from approved business knowledge, follows the
 conversation, and turns customer issues into confirmed, trackable requests.
 
-The reference product is **Maya, a Sun Direct-style telecom support assistant**.
+The reference product is **Maya, Tech Five's telecom support assistant**.
 Run a voice demo on your computer today; use it to evaluate the workflows your
 business needs before connecting a real phone line.
 
@@ -133,7 +133,8 @@ handoff, operational monitoring and data-handling controls. The Twilio bridge is
 an allowlisted inbound pilot, not a deployed multi-business answering service.
 Multi-business hosting also requires tenant isolation, concurrency and budget controls.
 Changing industry requires adapting the knowledge, persona, scope and data model.
-This project is independent and is not an official Sun Direct service.
+The Tech Five demo uses synthetic accounts and illustrative prices; verified
+company policies must be supplied before production use.
 
 ## Build and extend
 

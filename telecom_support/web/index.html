@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#10151d">
-  <title>Tele-Caller · Dial Maya</title>
+  <title>Tech Five · Dial Maya</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="stylesheet" href="/static/call.css?v=dialer-1">
   <script defer src="/static/livekit-client.umd.min.js"></script>
@@ -18,9 +18,9 @@
     <symbol id="shield-icon" viewBox="0 0 24 24"><path d="m12 2 8 3v6c0 5-8 11-8 11S4 16 4 11V5l8-3Zm-4 9 3 3 5-6"/></symbol>
   </defs></svg>
   <main id="device" class="device" data-phase="dialer">
-    <header class="topbar"><a href="/" class="brand">◔ <span>Tele-Caller</span></a><span class="private"><svg><use href="#shield-icon"/></svg>Private demo</span></header>
+    <header class="topbar"><a href="/" class="brand">◔ <span>Tech Five</span></a><span class="private"><svg><use href="#shield-icon"/></svg>Private demo</span></header>
     <section id="dial-screen" class="screen dial-screen" aria-label="Phone dialer">
-      <div class="dial-heading"><span class="eyebrow">VOICE SUPPORT</span><h1>Call Maya</h1><p>Your Sun Direct support assistant</p></div>
+      <div class="dial-heading"><span class="eyebrow">VOICE SUPPORT</span><h1>Call Maya</h1><p>Your Tech Five support assistant</p></div>
       <div class="number-entry"><label for="code">Enter your private dial code</label><input id="code" type="password" inputmode="numeric" maxlength="64" autocomplete="off" spellcheck="false" aria-describedby="dial-error"><button id="erase" type="button" class="erase" aria-label="Delete last character"><svg><use href="#delete-icon"/></svg></button></div>
       <p id="dial-error" class="dial-error" role="alert"></p>
       <div class="keypad" aria-label="Dial keypad">
@@ -37,7 +37,7 @@
     <section id="call-screen" class="screen call-screen" aria-label="Calling screen" hidden>
       <p class="call-label">TELE-CALLER VOICE</p>
       <div class="avatar-wrap"><div class="ripple"></div><div class="ripple second"></div><div class="avatar" aria-hidden="true">m</div></div>
-      <h2>Maya</h2><p class="agent-role">Sun Direct support</p>
+      <h2>Maya</h2><p class="agent-role">Tech Five support</p>
       <div class="call-status" role="status" aria-live="polite"><p id="connection">Connecting…</p><p id="message">Allow microphone access to continue.</p><p id="timer" class="timer" hidden>00:00</p></div>
       <div id="permission" class="permission-card" hidden><svg><use href="#mic-icon"/></svg><strong>Microphone access needed</strong><p id="permission-message">Allow microphone access in your browser to continue the call.</p><button id="retry-mic">Allow microphone / try again</button></div>
       <div id="call-controls" class="call-controls" hidden><div><button id="mute" class="round-control" aria-label="Mute microphone" aria-pressed="false"><svg><use href="#mic-icon"/></svg></button><span id="mute-label">Mute</span></div><div><button id="speaker" class="round-control" aria-label="Mute speaker" aria-pressed="false"><svg><use href="#speaker-icon"/></svg></button><span id="speaker-label">Speaker</span></div></div>

@@ -51,9 +51,9 @@ def test_conversation_stream_preserves_escaped_quotes_and_unicode_boundaries():
 def test_public_rag_emits_before_model_finishes_and_remembers_once():
     emitted = []
     def tokens(prompt):
-        yield "Open the Sun Direct website. "
+        yield "Open the Tech Five website. "
         yield "Choose recharge. "
-        assert emitted == ["Open the Sun Direct website."]
+        assert emitted == ["Open the Tech Five website."]
         yield "Follow the payment instructions."
     app = SupportRAG(SimpleNamespace(invoke=lambda _: [Document(page_content="Recharge via website.")]),
                      RunnableLambda(tokens))

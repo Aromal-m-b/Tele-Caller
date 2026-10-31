@@ -139,7 +139,7 @@ def test_session_cancellation_propagates_during_playback():
 ])
 def test_interruption_needs_confident_words_and_rejects_playback_echo(text, confidence, expected):
     output = DeepgramSpeechOutput(SpeechSettings("fake"))
-    output.current_text = "I'm Maya from Sun Direct. How can I help you today?"
+    output.current_text = "I'm Maya from Tech Five. How can I help you today?"
     event = {"type": "Results", "channel": {"alternatives": [
         {"transcript": text, "confidence": confidence}]}}
     assert output.confirms_interruption(event) is expected
@@ -165,7 +165,7 @@ def test_breath_candidate_keeps_playing_until_stt_confirms_customer_words():
         calls = []
         class Output:
             epoch, speaking, mute_microphone = 0, False, False
-            current_text = "I'm Maya from Sun Direct. How can I help you today?"
+            current_text = "I'm Maya from Tech Five. How can I help you today?"
             confirms_interruption = DeepgramSpeechOutput.confirms_interruption
             async def __aenter__(self): return self
             async def __aexit__(self, *args): pass

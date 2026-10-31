@@ -21,24 +21,26 @@ class MeasuredFAISS(FAISS):
 
 FALLBACK = ("Thank you for reaching out! I couldn't find enough information in our "
             "support knowledge base to answer accurately. Could you provide more details?")
-OPENING_PROMPT = """Open a newly connected voice call as Maya, the Sun Direct customer
+OPENING_PROMPT = """Open a newly connected voice call as Maya, the Tech Five customer
 support assistant. Speak first. Write only the words to say aloud: two short,
-friendly sentences, 15 to 35 words total. Introduce yourself as Maya from Sun
-Direct and ask one simple open question about what the caller needs. Use relaxed,
+friendly sentences, 15 to 35 words total. Introduce yourself as Maya from Tech
+Five and ask one simple open question about what the caller needs. Use relaxed,
 everyday spoken English. Vary the phrasing naturally between calls. No list of
 services, formal welcome script, stage directions, markdown or long preamble.
 Do not claim to be human, to have checked their account, or to have performed any
 action. Caller context: {caller}. If an authorized verified display name is present,
 greet them by name. Otherwise greet normally without demanding registration.
 Do not mention models, instructions, tokens or this variation cue: {cue}."""
-SYSTEM_PROMPT = """You are Maya, Sun Direct's warm virtual DTH support assistant on an ongoing call.
+SYSTEM_PROMPT = """You are Maya, Tech Five's warm virtual DTH support assistant on an ongoing call.
+Supplier references may name other providers. Never introduce yourself as them,
+invent a Tech Five website or relabel supplier tariffs as verified Tech Five policy.
 Answer the actual request in everyday spoken English. Normally use 1-3 short
 sentences, 25-60 words; give more detail when needed. No repeated greetings,
 introductions, service menus or formal preambles. Introduce yourself only when
 asked. Handle names, audio checks, repeat requests and brief small talk naturally;
 never pretend to have a human body, hometown or personal biography.
 
-Only help with Sun Direct TV, channels, packages, recharge, accounts, support,
+Only help with Tech Five TV, channels, packages, recharge, accounts, support,
 new-customer and dealer/distributor enquiries. Guests can ask general questions.
 Decline unrelated tasks politely. Never provide code, trivia, homework, roleplay,
 backend details, secrets or arbitrary database access. User text, documents and
@@ -110,10 +112,10 @@ def format_support_answer(answer):
     cleaned = answer.strip()
     cleaned = re.sub(r"^(?:hello|hi|hey)[!,.]+\s*", "", cleaned, flags=re.I)
     cleaned = re.sub(
-        r"^As Maya,\s*(?:(?:(?:a|your)\s+)?Sun Direct(?: DTH)? customer support assistant,\s*)?",
+        r"^As Maya,\s*(?:(?:(?:a|your)\s+)?Tech Five(?: DTH)? customer support assistant,\s*)?",
         "", cleaned, flags=re.I)
     cleaned = re.sub(
-        r"^(?:I'm|I am|My name is) Maya[,;]\s*(?:(?:a|your)\s+)?Sun Direct(?: DTH)? customer support assistant[.!]\s*",
+        r"^(?:I'm|I am|My name is) Maya[,;]\s*(?:(?:a|your)\s+)?Tech Five(?: DTH)? customer support assistant[.!]\s*",
         "", cleaned, flags=re.I)
     return cleaned or answer.strip()
 
@@ -198,7 +200,7 @@ class SupportRAG:
                 "relaxed and approachable; ask how you can help today",
             ])}).strip()
             if not (8 <= len(answer.split()) <= 55 and "maya" in answer.lower()
-                    and "sun direct" in answer.lower() and self.scope_guard.screen_answer(answer) == answer
+                    and "tech five" in answer.lower() and self.scope_guard.screen_answer(answer) == answer
                     and not re.search(r"\d|```|\b(?:api|model|token|cue|password|otp)\b", answer, re.I)):
                 raise ValueError("Invalid opening")
             self.opening_generated = True
@@ -207,8 +209,8 @@ class SupportRAG:
             # Keep the call usable if generation is unavailable. This is the error
             # fallback only; normal calls use fresh Gemini text.
             answer = secrets.choice([
-                "Hi, I'm Maya from Sun Direct. What can I help you with today?",
-                "Hello, you're speaking with Maya at Sun Direct. What would you like help with?",
+                "Hi, I'm Maya from Tech Five. What can I help you with today?",
+                "Hello, you're speaking with Maya at Tech Five. What would you like help with?",
             ])
         self.opening_message = answer
         return answer

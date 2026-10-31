@@ -110,8 +110,8 @@ with rates applicable to your chosen provider accounts.
 
 Do not present the demo as an automatic payment/refund processor, confirmed
 appointment scheduler, parcel dispatcher or human call-transfer system. Those
-integrations are not implemented. The reference assistant is not an official
-Sun Direct representative, and fictional demo data is not business policy.
+integrations are not implemented. Fictional demo data is not verified Tech Five
+business policy.
 
 ## Start with one workflow
 

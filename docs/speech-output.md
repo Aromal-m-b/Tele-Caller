@@ -7,7 +7,7 @@ This is a stock AI voice, not a recording of a human agent.
 
 After the STT socket and microphone connect, Maya speaks first. Standard Gemini
 generation creates one short opening per session with varied phrasing, introducing
-Maya from Sun Direct and asking how to help. No retrieval, customer data or account
+Maya from Tech Five and asking how to help. No retrieval, customer data or account
 tool call is used for this opening. It is retained as an assistant message in later
 prompts. If generation fails or returns invalid text, a short local fallback keeps
 the call usable. Identity questions with conversational filler get direct answers;

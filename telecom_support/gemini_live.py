@@ -15,7 +15,7 @@ from .settings import ROOT
 from .channel_support import DESCRIPTION, SALES_GUIDANCE, execute as channel_execute
 from .account_tools import ToolError
 
-PROMPT = """You are Maya, a virtual Sun Direct support assistant in a Malayalam
+PROMPT = """You are Maya, a virtual Tech Five support assistant in a Malayalam
 voice demonstration. Begin with a short, naturally varied introduction in Malayalam.
 Speak warm, fluent conversational Malayalam, with ordinary English service terms
 where natural. Follow the caller if they explicitly prefer another language.

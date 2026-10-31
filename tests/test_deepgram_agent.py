@@ -156,7 +156,7 @@ def test_handshake_greeting_and_direct_hangup_close_all_resources():
                 return json.dumps({'type':'Welcome' if self.count == 1 else 'SettingsApplied'})
             async def send(self,text): sent.append(json.loads(text))
             async def __aiter__(self):
-                for payload in [dict(type='ConversationText',role='assistant',content="I'm Maya from Sun Direct."),b'\x00\x01'*480,dict(type='AgentAudioDone')]:
+                for payload in [dict(type='ConversationText',role='assistant',content="I'm Maya from Tech Five."),b'\x00\x01'*480,dict(type='AgentAudioDone')]:
                     yield payload if isinstance(payload,bytes) else json.dumps(payload)
                 await drained.wait()
                 drained.clear()
@@ -252,6 +252,6 @@ def test_service_facts_are_not_forwarded_as_model_rewritten_embedding_query():
         session, sent = make_session(retrieve)
         session.business_data_seen = True
         session.history = ['How can I recharge online?']
-        await session.search({'query':'Sun Direct recharge for PRIVATE-DELIVERY-ADDRESS'})
+        await session.search({'query':'Tech Five recharge for PRIVATE-DELIVERY-ADDRESS'})
         retrieve.assert_called_once_with('How can I recharge online?')
     asyncio.run(run())

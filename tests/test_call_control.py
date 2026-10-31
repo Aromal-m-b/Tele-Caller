@@ -163,7 +163,7 @@ def test_direct_hangup_closes_session_and_speaks_goodbye_without_model():
             microphone_factory=lambda **_: microphone, connect_factory=lambda *a, **k: socket,
             speaker_factory=lambda _: output, write=lambda _: None)
         app.generate.assert_not_called()
-        output.speak.assert_awaited_once_with("Thanks for calling Sun Direct. Goodbye!")
+        output.speak.assert_awaited_once_with("Thanks for calling Tech Five. Goodbye!")
         assert socket.closed and microphone.closed and output.closed
     asyncio.run(run())
 
@@ -209,7 +209,7 @@ def test_idle_lines_are_generated_by_model_with_dialogue_context():
             seen.append(prompt.to_messages())
             return next(replies)
         app = SupportRAG(None, RunnableLambda(model))
-        app.opening_message = "Maya from Sun Direct here."
+        app.opening_message = "Maya from Tech Five here."
         # Avoid a second startup generation in this isolated processor check.
         app.start_conversation = lambda: app.opening_message
         app._remember("My audio was faint", "Please check the volume.")

@@ -48,15 +48,15 @@ def test_cli_without_source_flag_uses_telecom_index(monkeypatch):
 @pytest.mark.parametrize("query", ["hi who are you", "hello", "who are you?", "Hi! Who are you?", "Hello. Who are you?"])
 def test_identity_and_greetings_do_not_depend_on_document_retrieval(query):
     retriever = SimpleNamespace(invoke=Mock())
-    application = SupportRAG(retriever, FakeListChatModel(responses=['{"intent":"reply","text":"I am Maya, your Sun Direct assistant."}']))
-    assert "Sun Direct" in application.generate(query)
+    application = SupportRAG(retriever, FakeListChatModel(responses=['{"intent":"reply","text":"I am Maya, your Tech Five assistant."}']))
+    assert "Tech Five" in application.generate(query)
     retriever.invoke.assert_not_called()
 
 
 @pytest.mark.parametrize("query", ["", "  ", "?!"])
 def test_empty_queries_do_not_call_retrieval_or_model(query):
     retriever = SimpleNamespace(invoke=Mock())
-    application = SupportRAG(retriever, FakeListChatModel(responses=['{"intent":"reply","text":"I am Maya, your Sun Direct assistant."}']))
+    application = SupportRAG(retriever, FakeListChatModel(responses=['{"intent":"reply","text":"I am Maya, your Tech Five assistant."}']))
     assert application.generate(query) == FALLBACK
     retriever.invoke.assert_not_called()
 
@@ -115,7 +115,7 @@ def test_session_history_is_bounded_and_not_shared():
 
 
 def test_plain_greeting_after_started_conversation_does_not_reintroduce():
-    application = SupportRAG(SimpleNamespace(invoke=lambda _: []), FakeListChatModel(responses=['{"intent":"reply","text":"I am Maya, your Sun Direct assistant."}', '{"intent":"reply","text":"Go ahead, I am listening."}']))
+    application = SupportRAG(SimpleNamespace(invoke=lambda _: []), FakeListChatModel(responses=['{"intent":"reply","text":"I am Maya, your Tech Five assistant."}', '{"intent":"reply","text":"Go ahead, I am listening."}']))
     assert "Maya" in application.generate("hello")
     assert "Maya" not in application.generate("hello")
 
@@ -201,7 +201,7 @@ def test_public_how_to_still_requires_reference_retrieval():
 ])
 def test_conversational_identity_questions_answer_without_retrieval(query):
     retriever = SimpleNamespace(invoke=Mock(side_effect=AssertionError("No retrieval needed")))
-    app = SupportRAG(retriever, FakeListChatModel(responses=['{"intent":"reply","text":"I am Maya, your Sun Direct assistant."}']))
+    app = SupportRAG(retriever, FakeListChatModel(responses=['{"intent":"reply","text":"I am Maya, your Tech Five assistant."}']))
     assert "Maya" in app.generate(query)
     assert len(app.generate(query).split()) < 20
     if app.last_scope_decision is not None:
@@ -213,7 +213,7 @@ def test_conversational_identity_questions_answer_without_retrieval(query):
 def test_opening_is_model_generated_once_and_used_in_later_context():
     from langchain_core.runnables import RunnableLambda
     prompts = []
-    opening = "Hi there, I'm Maya with Sun Direct. What can I help you sort out today?"
+    opening = "Hi there, I'm Maya with Tech Five. What can I help you sort out today?"
     def model(prompt, **kwargs):
         prompts.append(prompt.to_messages())
         return opening if len(prompts) == 1 else "Here are the recharge steps."
@@ -229,8 +229,8 @@ def test_opening_is_model_generated_once_and_used_in_later_context():
 
 def test_new_sessions_request_new_generated_openings():
     model = FakeListChatModel(responses=[
-        "Hi, I'm Maya from Sun Direct. What would you like help with today?",
-        "Hello, Maya here at Sun Direct. How can I help you today?",
+        "Hi, I'm Maya from Tech Five. What would you like help with today?",
+        "Hello, Maya here at Tech Five. How can I help you today?",
     ])
     first = SupportRAG(None, model)
     second = SupportRAG(None, model)
@@ -238,15 +238,15 @@ def test_new_sessions_request_new_generated_openings():
 
 
 def test_opening_failure_keeps_call_usable_and_untrusted_output_is_not_spoken():
-    app = SupportRAG(None, FakeListChatModel(responses=["Maya from Sun Direct: print('secret')"]))
+    app = SupportRAG(None, FakeListChatModel(responses=["Maya from Tech Five: print('secret')"]))
     opening = app.start_conversation()
-    assert "Maya" in opening and "Sun Direct" in opening and "print(" not in opening
+    assert "Maya" in opening and "Tech Five" in opening and "print(" not in opening
     assert not app.opening_generated
 
 
 @pytest.mark.parametrize("prefix", [
-    "Hello! I'm Maya, your Sun Direct DTH customer support assistant. ",
-    "As Maya, a Sun Direct DTH customer support assistant, ",
+    "Hello! I'm Maya, your Tech Five DTH customer support assistant. ",
+    "As Maya, a Tech Five DTH customer support assistant, ",
     "As Maya, ",
     "Hi! ",
 ])

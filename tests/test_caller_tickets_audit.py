@@ -126,7 +126,7 @@ def test_display_name_is_sent_only_for_greeting_events(account):
     seen = []
     def model(prompt):
         seen.append(str(prompt.to_messages()))
-        return "Hello Demo Caller, I'm Maya from Sun Direct. What can I help you with today?"
+        return "Hello Demo Caller, I'm Maya from Tech Five. What can I help you with today?"
     app = SupportRAG(None, RunnableLambda(model))
     app.caller_session = account.caller_session
     app.start_conversation()
