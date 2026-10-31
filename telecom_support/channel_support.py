@@ -4,7 +4,7 @@ import re
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .account_tools import DATA_NOTICE, ToolError, money, timestamp, truth, INDIA
+from .account_tools import DATA_NOTICE, ToolError, money, package_price, timestamp, truth, INDIA
 
 
 class ChannelArgs(BaseModel):
@@ -30,6 +30,8 @@ accounts, restoration needs support, not a promise that payment fixes it.
 Respect each option's billing_period. If unspecified, report only the source-listed
 price and say the billing period is unconfirmed; never turn it into a monthly quote
 or compare its recurring cost to a monthly package as though periods were equal.
+A null package price marked UNQUOTED_SYNTHETIC_DEMO is unquoted, never free or
+zero. Do not calculate savings or a payable total for an unquoted package.
 If the individual channel price is zero, say there is no channel charge in this
 catalog; verify base-service requirements rather than selling it as a paid add-on.
 You may offer a higher-value package when its returned included channels fit the
@@ -122,6 +124,8 @@ def diagnose(account, channel=None):
         view = {"package_name":packages[bid]["bouquet_name"] if bid else None,
                 "start_date":str(row["start_date"]),"expiry_date":str(row["expiry_date"]),
                 "channel_ids":[]}
+        if bid:
+            view.update(monthly_catalog_price_inr=package_price(packages[bid]),pricing_status=packages[bid].get('pricing_status'))
         parent_channels = members[bid] if bid else set()
         addon_ids = set()
         for addition in additions:
@@ -169,12 +173,12 @@ def diagnose(account, channel=None):
             included = {x for x in members[bid] if truth(by_id[x].get("is_active"))}
             options.append({"kind":"package","package_name":row["bouquet_name"],
                 "billing_period":"monthly",
-                "monthly_catalog_price_inr":money(row.get("monthly_price_inr")),
+                "monthly_catalog_price_inr":package_price(row),"pricing_status":row.get('pricing_status'),
                 "included_channels":[by_id[x]["channel_name"] for x in sorted(included)],
                 "additional_channels":[by_id[x]["channel_name"] for x in sorted(included-eligible)],
                 "channels_lost_if_replacing_all_current_plans":[by_id[x]["channel_name"] for x in sorted(eligible-included)],
                 "effect":"Catalog package price, not an upgrade difference. Replacement may remove existing channels; adding retains them at extra cost."})
-        individual, packs = options[0], sorted(options[1:],key=lambda r:(Decimal(r["monthly_catalog_price_inr"]),r["package_name"]))
+        individual, packs = options[0], sorted(options[1:],key=lambda r:(r['monthly_catalog_price_inr'] is None,Decimal(r["monthly_catalog_price_inr"] or '0'),r["package_name"]))
         options = [individual]+packs[:5]
     return {"ok":True,"data_notice":DATA_NOTICE,"state":reason,"entitled":entitled,
         "checked_at":now.isoformat(),"requested_channel":{"channel_id":cid,"channel_name":requested["channel_name"]},

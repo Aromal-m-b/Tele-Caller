@@ -33,3 +33,12 @@ Tool results exclude phone numbers, customer/subscription identifiers, smartcard
 addresses, emails and profile names. Deepgram retains its synthetic service sharing
 gate. Gemini Live receives the allowlisted summary directly. Both models are
 instructed to summarize counts first and fetch names only for deeper questions.
+
+The optional `scripts/assign_family_demo.py` command assigns one active synthetic
+caller a 30-day, nonrenewing **Tech Five Malayalam English Family** demo plan:
+Malayalam, English, Kids and Infotainment sections plus all Discovery variants.
+The current source yields 43 distinct channels, including Discovery Channel,
+Discovery Kids and Discovery HD World. Price is unquoted, not zero; no payment is
+created. The script backs up its affected records, refuses to replace another
+subscription, and does not extend or reactivate a plan when run again. This is a
+local development seed operation, not a model-accessible purchase tool.

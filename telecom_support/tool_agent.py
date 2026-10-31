@@ -101,6 +101,9 @@ def create_tools(service):
 
 def render_result(name, result):
     """Local deterministic presentation: no customer database values enter an LLM."""
+    def price(row):
+        return ('Price not quoted' if row.get('monthly_price_inr') is None
+                else f"INR {row['monthly_price_inr']}/month (illustrative)")
     if not result.get("ok"):
         return result["error"]["message"]
     notice = result.get("data_notice", "")
@@ -120,7 +123,7 @@ def render_result(name, result):
         row = result["subscription"]
         body = (f"Package: {row['bouquet']['bouquet_name']}. Validity: {row['start_date']} to {row['expiry_date']}. "
                 + ("It is currently valid." if row["is_currently_valid"] else "There is no currently valid active subscription.")
-                + f" Catalog monthly price: INR {row['bouquet']['monthly_price_inr']} (illustrative).")
+                + f" Catalog price: {price(row['bouquet'])}.")
     elif name == "get_previous_recharge":
         payment, subscription = result["payment"], result["subscription"]
         body = (f"Your latest successful recharge was for {subscription['bouquet']['bouquet_name']}: "
@@ -154,13 +157,13 @@ def render_result(name, result):
             body = "No active package in this test catalog matches those requirements."
         else:
             body = ("Best matching test-catalog packages:\n" if name == "recommend_plan" else "Available test-catalog packages:\n")
-            body += "\n".join(f"{row['bouquet_name']} ({row['bouquet_id']}): INR {row['monthly_price_inr']}/month (illustrative), {row['primary_language']}"
+            body += "\n".join(f"{row['bouquet_name']} ({row['bouquet_id']}): {price(row)}, {row['primary_language']}"
                               + ("; included channels: " + ", ".join(c["channel_name"] for c in row["channels"]) if "channels" in row else "")
                               for row in rows)
     elif name == "compare_plans":
         a, b = result["first"], result["second"]
-        body = (f"{a['bouquet_name']}: INR {a['monthly_price_inr']}/month, {len(a['channels'])} channels. "
-                f"{b['bouquet_name']}: INR {b['monthly_price_inr']}/month, {len(b['channels'])} channels. "
+        body = (f"{a['bouquet_name']}: {price(a)}, {len(a['channels'])} channels. "
+                f"{b['bouquet_name']}: {price(b)}, {len(b['channels'])} channels. "
                 f"Shared channels: {len(result['shared_channel_ids'])}; only in first: {len(result['first_only_channel_ids'])}; only in second: {len(result['second_only_channel_ids'])}. Prices are illustrative.")
     else:
         body = "The read-only lookup completed."

@@ -161,6 +161,13 @@ Bouquets include `membership_rule`, `membership_basis` and
 provider package definitions. Prices remain the original illustrative fixtures.
 See [membership rules](docs/membership-rebuild.md).
 
+An additional user-requested synthetic **Tech Five Malayalam English Family**
+package contains 43 imported channels: Malayalam, English, Kids, Infotainment
+and all source-listed Discovery variants. Its price is null with
+`pricing_status: UNQUOTED_SYNTHETIC_DEMO`, never a zero-price offer. One 30-day,
+nonrenewing demo subscription was assigned without a payment. Following this
+seed there are 13 bouquets, 531 package-channel links and 101 subscriptions.
+
 ### 2.5 subscriptions
 
 **Purpose:** Stores the customer's current or historical subscription records.

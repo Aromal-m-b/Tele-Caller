@@ -72,6 +72,12 @@ def serial(record):
     return result
 
 
+def package_price(record):
+    if record.get('monthly_price_inr') is None and record.get('pricing_status')=='UNQUOTED_SYNTHETIC_DEMO':
+        return None
+    return money(record.get('monthly_price_inr'))
+
+
 class AccountTools:
     """All customer IDs come from trusted session identity, never tool arguments."""
     def __init__(self, database, identity=None, *, now=None):
@@ -122,7 +128,7 @@ class AccountTools:
     def _bouquet(self, bouquet_id):
         record = self._one("bouquets", {"bouquet_id": bouquet_id}, "PACKAGE_NOT_FOUND")
         result = serial(record)
-        result["monthly_price_inr"] = money(record.get("monthly_price_inr"))
+        result["monthly_price_inr"] = package_price(record)
         result["is_active"] = truth(record.get("is_active"))
         return result
 
@@ -227,7 +233,8 @@ class AccountTools:
                                                    "customer_id": customer["customer_id"]}, "PAYMENT_SUBSCRIPTION_MISMATCH")
         details = self._subscription_details(subscription, customer)
         payment["amount_inr"] = money(payment["amount_inr"])
-        eligible = details["bouquet"]["is_active"] and str(customer.get("account_status", "")).lower() == "active"
+        eligible = (details["bouquet"]["is_active"] and details['bouquet']['monthly_price_inr'] is not None
+                    and str(customer.get("account_status", "")).lower() == "active")
         result = {"payment": serial(payment), "subscription": details,
                   "channels": self._channels(subscription["bouquet_id"]),
                   "can_select_for_continuation": eligible, "confirmation_required": True,
@@ -286,7 +293,7 @@ class AccountTools:
         limit = money(max_price_inr) if max_price_inr is not None else None
         candidates = []
         for bouquet in self.list_bouquets(language)["bouquets"]:
-            if limit is not None and Decimal(bouquet["monthly_price_inr"]) > Decimal(limit):
+            if limit is not None and (bouquet['monthly_price_inr'] is None or Decimal(bouquet["monthly_price_inr"]) > Decimal(limit)):
                 continue
             channels = self._channels(bouquet["bouquet_id"])
             available = [row for row in channels if row["is_active"]]
@@ -300,7 +307,7 @@ class AccountTools:
                 candidates.append({**bouquet, "channels": channels, "matching_channels": matches,
                                    "matched_genres": sorted(matched_genres),
                                    "exclusions_checked_against_all_package_channels": True})
-        candidates.sort(key=lambda row: (-len(row["matched_genres"]), Decimal(row["monthly_price_inr"])))
+        candidates.sort(key=lambda row: (-len(row["matched_genres"]),row['monthly_price_inr'] is None, Decimal(row["monthly_price_inr"] or '0')))
         return {"recommendations": candidates[:5], "exact_match_found": bool(candidates)}
 
     def execute(self, name, arguments):
