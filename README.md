@@ -171,3 +171,6 @@ customer-service backend available through `start-webrtc.bat`.
 Both voice backends support [missing-channel diagnosis](docs/channel-support.md):
 check active packages and add-ons, explain eligibility, and compare illustrative
 individual-channel and package options without making a payment or changing plans.
+
+[Import channel tables from HTML](docs/channel-import.md) while preserving original
+TD values, source metadata and existing package/subscription channel links.

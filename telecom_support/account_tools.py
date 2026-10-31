@@ -5,7 +5,7 @@ from decimal import Decimal, InvalidOperation
 import re
 
 INDIA = timezone(timedelta(hours=5, minutes=30))
-DATA_NOTICE = "Synthetic test dataset. Package and channel prices are illustrative, not verified official tariffs."
+DATA_NOTICE = "Demo account dataset. Catalog prices are illustrative or source-listed amounts, not verified official tariffs."
 
 
 class ToolError(Exception):
@@ -137,7 +137,7 @@ class AccountTools:
             item = serial(row)
             item["is_active"] = truth(row.get("is_active"))
             item["is_hd"] = truth(row.get("is_hd"))
-            item["monthly_price_inr"] = money(row.get("monthly_price_inr"))
+            item["monthly_price_inr"] = money(row["monthly_price_inr"]) if row.get("monthly_price_inr") is not None else None
             result.append(item)
         return sorted(result, key=lambda item: item["channel_name"])
 

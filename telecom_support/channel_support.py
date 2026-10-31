@@ -23,9 +23,13 @@ entitlement reason, not an unverified technical cause. If entitled, troubleshoot
 or offer a complaint; never sell a recharge to restore an already-included channel.
 If not entitled, present the individual add-on price and cheapest suitable package
 option, including ongoing cost and any channels lost if replacing plans. Explain
-that these are illustrative synthetic monthly catalog prices, not final payable
-quotes; taxes, base fees, proration and eligibility are unconfirmed. For inactive
+the price basis accurately: package fixtures are illustrative monthly prices;
+imported channel amounts are unverified source-listed prices. Neither is a final
+payable quote; taxes, base fees, proration and eligibility are unconfirmed. For inactive
 accounts, restoration needs support, not a promise that payment fixes it.
+Respect each option's billing_period. If unspecified, report only the source-listed
+price and say the billing period is unconfirmed; never turn it into a monthly quote
+or compare its recurring cost to a monthly package as though periods were equal.
 If the individual channel price is zero, say there is no channel charge in this
 catalog; verify base-service requirements rather than selling it as a paid add-on.
 You may offer a higher-value package when its returned included channels fit the
@@ -135,13 +139,18 @@ def diagnose(account, channel):
               "no_current_subscription" if not active_plans else "not_in_active_subscription")
     options = []
     if not entitled and reason not in {"account_inactive","channel_unavailable"}:
+        monthly = requested.get("monthly_price_inr")
+        amount = money(monthly if monthly is not None else requested.get("price_inr"))
         options.append({"kind":"individual_channel","channel_name":requested["channel_name"],
-            "monthly_catalog_price_inr":money(requested.get("monthly_price_inr")),
+            "catalog_price_inr":amount,"source_price_text":requested.get("price"),
+            "billing_period":requested.get("billing_period","monthly") if monthly is not None else None,
+            "monthly_catalog_price_inr":money(monthly) if monthly is not None else None,
             "effect":"Add this channel; base service requirements and final payable total must be verified."})
         for bid, row in packages.items():
             if not truth(row.get("is_active")) or cid not in members[bid]: continue
             included = {x for x in members[bid] if truth(by_id[x].get("is_active"))}
             options.append({"kind":"package","package_name":row["bouquet_name"],
+                "billing_period":"monthly",
                 "monthly_catalog_price_inr":money(row.get("monthly_price_inr")),
                 "included_channels":[by_id[x]["channel_name"] for x in sorted(included)],
                 "additional_channels":[by_id[x]["channel_name"] for x in sorted(included-eligible)],
@@ -157,7 +166,7 @@ def diagnose(account, channel):
         "options":options,"payment_executed":False,"subscription_changed":False,
         "instruction":("Already entitled: this database cannot diagnose signal, activation, equipment or broadcaster outages. Troubleshoot instead of selling a recharge."
             if entitled else "Explain the recorded state; offer options only where returned. Ask preferences/budget and permission to guide recharge. No payment or subscription change was made."),
-        "quote_limitations":"Synthetic illustrative monthly prices. Taxes, base fees, final totals, proration, discounts and activation eligibility are unverified. Never promise buying fixes reception."}
+        "quote_limitations":"Demo catalog, not official quotes. Package fixture prices are illustrative monthly amounts; imported individual prices may have an unspecified billing period. Taxes, base fees, final totals, proration, discounts and activation eligibility are unverified. Never promise buying fixes reception."}
 
 
 def execute(account, arguments):

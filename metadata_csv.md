@@ -85,6 +85,37 @@ relationships, transaction behaviour, confirmation flow and permitted spoken dat
 
 **Primary Key:** `channel_id`
 
+**HTML catalog import (October 31, 2026):** `pretty.html` supplies 254 unique
+channel rows in 19 sections. The merge updates 30 exact name-and-format matches,
+adds 224 generated IDs, and retains six existing referenced records: 260 total.
+Existing IDs and package/add-on references are preserved. Source channel names,
+numbers, HD/SD, price text and image metadata are not rebranded or rewritten.
+
+Imported records add these fields:
+
+| Field | Meaning |
+|---|---|
+| `channel_number` | Original TD text, stored as a string |
+| `hd_sd` | Original `HD` or `SD` text |
+| `price` | Original price text, including `Free` or the rupee symbol |
+| `price_inr` | Decimal128 parsed amount; `Free` maps to zero |
+| `monthly_price_inr`, `billing_period` | Null when the source does not specify a period |
+| `language`, `genre` | Exact section label only when it explicitly denotes that feature; otherwise null |
+| `source_section`, `source_heading` | Unchanged source labels |
+| `source_headers`, `source_values` | Original table headers and TD text values |
+| `source_cells` | Each cell's text, inner HTML and attributes, in original column order |
+| `source_row_attributes` | Original row attributes |
+| `logo_attributes`, `logo_url` | Original image attributes; URL uses `data-original` before placeholder `src` |
+| `source_file`, `source_sha256` | Source filename and byte-content hash |
+| `data_type` | `IMPORTED_HTML` |
+| `pricing_status` | `SOURCE_LISTED_UNVERIFIED` |
+| `availability_status` | `SOURCE_LISTED_NOT_VERIFIED`; catalog listing does not verify broadcast availability |
+
+The original fixture's monthly-price description above applies only to fixture
+rows. Imported amounts must not be presented as verified official or monthly
+prices without separate evidence. Package prices remain synthetic examples.
+The `channel_id` field now has a unique index.
+
 **Relationships:**
 - A channel may belong to multiple bouquets.
 - A channel may be independently activated on multiple subscriptions.

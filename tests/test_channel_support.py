@@ -130,3 +130,15 @@ def test_expired_addon_and_no_subscription_are_distinct(account):
     assert execute(account,{'channel':'Sports'})['state']=='individual_addon_not_current'
     account.db.subscriptions.delete_many({})
     assert execute(account,{'channel':'Sports'})['state']=='no_current_subscription'
+
+
+def test_imported_price_without_period_is_not_quoted_as_monthly(account):
+    from bson.decimal128 import Decimal128
+    account.db.channels.update_one({'channel_id':'4'},{'$set':{
+        'price':'₹10.62','price_inr':Decimal128('10.62'),'monthly_price_inr':None,'billing_period':None}})
+    option=execute(account,{'channel':'Sports'})['options'][0]
+    assert option['catalog_price_inr']=='10.62' and option['source_price_text']=='₹10.62'
+    assert option['monthly_catalog_price_inr'] is None and option['billing_period'] is None
+    # Catalog joins must also tolerate the source's unknown billing period.
+    channels=account._channels('B2')
+    assert next(r for r in channels if r['channel_id']=='4')['monthly_price_inr'] is None

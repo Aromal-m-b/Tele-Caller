@@ -43,9 +43,11 @@ Zero-priced channels must not be pitched as paid add-ons.
 The model can ask about budget and viewing interests and offer a more suitable
 higher-value package with factual benefits. It must also present the individual
 option and cheapest suitable package. No fabricated discounts, false urgency,
-hidden trade-offs or continued pressure after a refusal. Prices are synthetic,
-illustrative monthly amounts; taxes, base fees, proration, final quotes and
-activation eligibility are not verified. Negotiation means discussing documented
+hidden trade-offs or continued pressure after a refusal. Package fixture prices
+are synthetic illustrative monthly amounts. Imported channel prices retain their
+source text and have no billing period unless the source supplies one; never
+present those amounts as monthly prices. Taxes, base fees, proration, final quotes
+and activation eligibility are not verified. Negotiation means discussing documented
 value and alternatives, not authority to alter prices.
 
 This tool is read-only. No payment, recharge, renewal or account change occurs.
