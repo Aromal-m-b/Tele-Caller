@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .account_tools import ToolError
 from .service_schema import mongo_transaction
 from .addresses import customer_address, format_address
+from .channel_support import ChannelArgs, DESCRIPTION as CHANNEL_DESCRIPTION, execute as channel_execute
 
 PRODUCTS = {"DISH": "Satellite dish", "SET_TOP_BOX": "Set-top box", "COAXIAL_CABLE": "Coaxial cable",
     "DUPLICATE_SMARTCARD": "Duplicate smartcard", "REMOTE": "Remote control", "CONNECTOR": "Cable connector",
@@ -80,6 +81,7 @@ class DeliveryLookup(StrictArgs):
 
 
 DEFINITIONS = {
+    "diagnose_channel_access": (ChannelArgs, CHANNEL_DESCRIPTION),
     "get_service_context": (StrictArgs, "Check locally whether the caller number matches a synthetic customer. Never ask for a customer ID or phone number."),
     "draft_complaint": (ComplaintArgs, "Prepare a complaint form: missing payment, no signal, technician misconduct, support, billing or pricing. Draft only; ask for explicit submission confirmation."),
     "draft_service_request": (ServiceArgs, "Prepare a service visit, new connection, relocation or cancellation REQUEST. Use the saved customer address by omitting location_address; do not ask registered callers to dictate it. Relocation requires a new destination. No account change or confirmed appointment."),
@@ -154,6 +156,8 @@ class CustomerServices:
             if name.startswith("draft_"):
                 return self.draft(name, args)
             customer = self.customer()
+            if name == "diagnose_channel_access":
+                return channel_execute(self.account, args)
             base = {"customer_id": customer["customer_id"], "data_type": "SYNTHETIC"}
             if name == "get_service_requests":
                 if args["request_id"]: base["request_id"] = args["request_id"]

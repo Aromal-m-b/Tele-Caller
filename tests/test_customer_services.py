@@ -420,7 +420,8 @@ def test_agent_session_confirms_from_real_reply_after_question_playback(services
         assert services.db.service_requests.count_documents({}) == 1
         assert 'Submitted' in sent[-1]['content']
         payload = agent_settings(SpeechSettings('fake'),AgentConfig(),service_tools=True)
-        assert len(payload['agent']['think']['functions']) == 9
+        from telecom_support.customer_services import DEFINITIONS
+        assert {tool['name'] for tool in payload['agent']['think']['functions']} == {'query_rag','end_call',*DEFINITIONS}
     asyncio.run(run())
 
 

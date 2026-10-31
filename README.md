@@ -166,3 +166,7 @@ Released under the [MIT license](LICENSE).
 Use [Gemini Live](docs/gemini-live.md) with the existing browser dialer by running
 `start-gemini-live.bat`. This separate native audio demo leaves the Deepgram
 customer-service backend available through `start-webrtc.bat`.
+
+Both voice backends support [missing-channel diagnosis](docs/channel-support.md):
+check active packages and add-ons, explain eligibility, and compare illustrative
+individual-channel and package options without making a payment or changing plans.

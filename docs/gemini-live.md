@@ -4,9 +4,10 @@ This optional backend replaces Deepgram Voice Agent for a call with Google's
 native audio model. It uses the existing LiveKit room, dialer, access code and
 Vercel/ngrok routes. No frontend changes or Vercel secrets are needed.
 
-This is a conversation demo, not parity with the Deepgram service backend:
-it does not load MongoDB, customer identities, complaint/order tools or FAISS.
-It cannot quote verified current prices or submit requests. Keep using
+This backend now includes a read-only MongoDB channel-access tool bound to the
+configured synthetic caller number. It checks active subscriptions, individual
+add-ons and catalog alternatives. It does not include complaint/order tools or FAISS.
+It cannot quote verified official prices or submit requests. Keep using
 `start-webrtc.bat` for the existing Deepgram customer-service implementation.
 
 ## Start
@@ -44,8 +45,15 @@ or idle prompt scheduler is implemented in this demo.
 Private local files in `output/calls` contain transcript fragments and raw usage
 snapshots. Do not sum cumulative snapshots. Native audio billing differs from text
 generation; costs are explicitly unavailable rather than estimated with text rates.
-Audio and conversational content are sent to Google, so use demo conversations.
+Audio, conversational content and allowlisted synthetic channel entitlements and
+catalog options are sent to Google, so use demo conversations. Database caller
+numbers, customer IDs, smartcards, addresses, emails and profiles are excluded from
+tool responses. Anything the caller says still goes to Google as audio. `MONGODB_URI`,
+`MONGODB_DATABASE` and `CALLER_PHONE` configure the read-only lookup. An unrecognized
+caller gets an unavailable result, never another customer's account.
 The API key stays on the Python server. Model access, billing and Malayalam voice
 quality must be checked with your own API account and a real listening test.
 
 Protocol/configuration follow the [Google Live API guide](https://ai.google.dev/gemini-api/docs/live-api/capabilities).
+
+See [channel support and recommendations](channel-support.md) for decision rules.
