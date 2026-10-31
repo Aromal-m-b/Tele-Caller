@@ -161,3 +161,8 @@ private corpora, database exports, generated indexes and call logs are excluded
 from the repository. Included demo policies and prices are fictional.
 
 Released under the [MIT license](LICENSE).
+# Optional Malayalam voice demo
+
+Use [Gemini Live](docs/gemini-live.md) with the existing browser dialer by running
+`start-gemini-live.bat`. This separate native audio demo leaves the Deepgram
+customer-service backend available through `start-webrtc.bat`.

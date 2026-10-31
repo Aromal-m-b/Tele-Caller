@@ -126,7 +126,7 @@ class BrowserSessions:
         await asyncio.gather(*(row["task"] for row in self.sessions.values()),return_exceptions=True)
 
 
-def create_app(*,config=None,runtime=None,runner=None,delete_room=None):
+def create_app(*,config=None,runtime=None,runner=None,delete_room=None,backend="deepgram-agent"):
     runtime=runtime or SessionRuntime("LiveKit WebRTC browser audio",mode="webrtc")
     @asynccontextmanager
     async def lifespan(app):
@@ -166,7 +166,7 @@ def create_app(*,config=None,runtime=None,runner=None,delete_room=None):
     @app.get("/health")
     async def health():
         settings()
-        return {"status":"online","transport":"livekit-webrtc","backend":"deepgram-agent"}
+        return {"status":"online","transport":"livekit-webrtc","backend":backend}
 
     @app.post("/api/sessions")
     async def start(request:Request):
