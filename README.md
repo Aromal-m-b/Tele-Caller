@@ -148,6 +148,30 @@ Customer speech → streaming recognition → conversation + approved knowledge/
 · [Database model](docs/customer-services.md) · [Developer guide](docs/developer-guide.md)
 · [Caller, ticket and logging setup](docs/callers-tickets-logs.md)
 
+## Test the model safely with pytest
+
+The project’s pytest suite is the repeatable quality gate for the model
+integration. It verifies the surrounding contracts that make a voice assistant
+safe and useful: RAG retrieval and context continuity, tool schemas and
+confirmation gates, phone/account scoping, channel entitlement reasoning,
+MongoDB writes, streaming audio, barge-in cancellation and call cleanup. It
+also tests the HTML channel import and synthetic package rebuild, including
+deterministic IDs and link integrity.
+
+Run the full regression suite with the voice environment:
+
+```powershell
+.\.venv-livekit\Scripts\python.exe -m pytest -q
+```
+
+The tests use fake model/provider streams and in-memory database fixtures for
+fast, deterministic, non-billable checks. They do not train the model; they
+catch malformed model tool calls, stale subscription data, privacy leaks and
+audio lifecycle regressions before a live call. Provider qualification checks
+are kept separate because real Gemini/Deepgram calls are slower, variable and
+billable. See [Testing with pytest](docs/testing.md) for the complete test map,
+focused commands, current result and live-check procedure.
+
 ```powershell
 python -m pip install -r requirements-dev.txt
 python -m pytest -q
