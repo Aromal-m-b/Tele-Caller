@@ -128,6 +128,12 @@ class CustomerServices:
         self.account, self.caller, self.db = account, caller, account.db
         self.call_id, self.share_details, self.transact, self.clock = call_id, share_details, transact, clock
         self.pending, self.armed_at = None, float("inf")
+        # Gemini Live sets these from audio turn order. They intentionally do
+        # not depend on the language or wording of the confirmation question.
+        self.review_turn_completed = False
+        self.caller_turn_sequence = 0
+        self.reviewed_after_sequence = None
+        self.last_submission_attempt_sequence = None
         self.lock = threading.RLock()
         self.interpret_reply = interpret_reply
 
@@ -247,6 +253,9 @@ class CustomerServices:
             request_id="REQ-" + uuid.uuid4().hex[:16].upper(), order_id="ORD-" + uuid.uuid4().hex[:16].upper(),
             delivery_id="DLV-" + uuid.uuid4().hex[:16].upper(), created_at=datetime.now(timezone.utc))
         self.armed_at = float("inf")
+        self.review_turn_completed = False
+        self.reviewed_after_sequence = None
+        self.last_submission_attempt_sequence = None
         return self.preview()
 
     def preview(self):
@@ -361,6 +370,9 @@ class CustomerServices:
         result = self.transact(self.db, persist)
         if draft["new_customer"]: self.caller.bind(draft["new_customer"])
         self.pending, self.armed_at = None, float("inf")
+        self.review_turn_completed = False
+        self.reviewed_after_sequence = None
+        self.last_submission_attempt_sequence = None
         return result
 
     @staticmethod
