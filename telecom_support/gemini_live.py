@@ -130,11 +130,13 @@ class GeminiRuntime:
                     except Exception:
                         services = None
                         audit.write("Service request tools unavailable; retaining channel account access.")
-            except Exception:
+            except Exception as error:
                 if audit.client is not None:
                     audit.client.close()
                     audit.client = None
-                audit.write("Channel account lookup unavailable. Continuing without account access.")
+                # Keep diagnostics safe: expose only the exception class, never
+                # connection strings, customer records or provider payloads.
+                audit.write("Channel account lookup unavailable (" + type(error).__name__ + "). Continuing without account access.")
                 account = None
             return SimpleNamespace(audit=audit,channel_account=account,customer_services=services), None, config
         except BaseException:
