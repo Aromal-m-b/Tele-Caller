@@ -4,13 +4,13 @@ This optional backend replaces Deepgram Voice Agent for a call with Google's
 native audio model. It uses the existing LiveKit room, dialer, access code and
 Vercel/ngrok routes. No frontend changes or Vercel secrets are needed.
 
-This backend now includes a read-only MongoDB channel-access tool bound to the
-configured synthetic caller number. It checks active subscriptions, individual
-add-ons and catalog alternatives. A compact subscription-summary tool provides
-plan names, counts and paginated language/genre/HD/SD channel drill-down. It does
-not include complaint/order tools or FAISS.
-It cannot quote verified official prices or submit requests. Keep using
-`start-webrtc.bat` for the existing Deepgram customer-service implementation.
+This backend includes MongoDB tools bound to the configured synthetic caller
+number. It checks active subscriptions, individual add-ons and catalog
+alternatives, and provides compact language/genre/HD/SD summaries. It can also
+prepare complaints, service requests and equipment orders, look up prior
+requests/orders/deliveries, and submit a reviewed form after the caller clearly
+confirms it. It does not use FAISS or perform payments, dispatches or plan
+changes. `start-webrtc.bat` remains the Deepgram customer-service launcher.
 
 ## Start
 
