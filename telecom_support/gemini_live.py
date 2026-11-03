@@ -120,9 +120,16 @@ class GeminiRuntime:
                 if account and (not caller.customer or caller.customer.get("data_type")!="SYNTHETIC"):
                     account = None
                 if account and caller:
-                    ensure_service_schema(account.db)
-                    services = CustomerServices(account, caller, call_id=audit.path.stem,
-                        share_details=os.getenv("AGENT_SHARE_SYNTHETIC_SERVICE_DETAILS", "false").casefold() in {"1","true","yes"})
+                    # Service collections are optional. Preserve the account
+                    # binding for channel/subscription lookups if their schema
+                    # cannot be initialized.
+                    try:
+                        ensure_service_schema(account.db)
+                        services = CustomerServices(account, caller, call_id=audit.path.stem,
+                            share_details=os.getenv("AGENT_SHARE_SYNTHETIC_SERVICE_DETAILS", "false").casefold() in {"1","true","yes"})
+                    except Exception:
+                        services = None
+                        audit.write("Service request tools unavailable; retaining channel account access.")
             except Exception:
                 if audit.client is not None:
                     audit.client.close()
