@@ -106,13 +106,19 @@ class GeminiRuntime:
         from .service_schema import ensure_service_schema
         config = LiveConfig.load()
         audit = LiveAudit(config.model)
+        # Keep the call usable as a public/guest conversation when MongoDB or
+        # service-schema initialization is unavailable.  These are deliberately
+        # initialized before the guarded lookup so the fallback cannot raise
+        # UnboundLocalError while constructing the session object.
+        account = None
+        services = None
+        caller = None
         try:
             try:
                 account, audit.client = database_service()
                 caller = CallerSession(account,caller_phone,call_id=audit.path.stem,audit=audit,allow_suspended=True) if account else None
                 if account and (not caller.customer or caller.customer.get("data_type")!="SYNTHETIC"):
                     account = None
-                services = None
                 if account and caller:
                     ensure_service_schema(account.db)
                     services = CustomerServices(account, caller, call_id=audit.path.stem,
